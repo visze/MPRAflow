@@ -348,10 +348,10 @@ process 'raw_counts'{
     publishDir "$params.outdir/$cond/$rep"
 
     input:
-        tuple val(cond), val(rep),val(type),val(datasetID),file(bam) from clean_bam
+        tuple val(cond), val(rep), val(type), val(datasetID), file(bam) from clean_bam
         val(umi_length) from params.umi_length
     output:
-        tuple val(cond), val(rep),val(type),val(datasetID),file("${datasetID}_raw_counts.tsv.gz") into raw_ct
+        tuple val(cond), val(rep), val(type), val(datasetID), val("raw"), file("${datasetID}_raw_counts.tsv.gz") into raw_ct, raw_ct_stats
     script:
         if(params.no_umi)
             """
@@ -390,61 +390,182 @@ process 'filter_counts'{
     conda 'conf/mpraflow_py27.yml'
 
     input:
-        tuple val(cond), val(rep),val(type),val(datasetID),file(rc) from raw_ct
+        tuple val(cond), val(rep), val(type), val(datasetID), val(rawType), file(rc) from raw_ct
         val(bcLength) from params.bc_length
     output:
-        tuple val(cond), val(rep),val(type),val(datasetID),file("${datasetID}_filtered_counts.tsv.gz") into filter_ct
+        tuple val(cond), val(rep), val(type), val(datasetID), val("filtered"), file("${datasetID}_filtered_counts.tsv.gz") into filter_ct, filter_ct_stats
     shell:
         """
         bc=$bcLength
         echo \$bc
         zcat $rc | grep -v "N" | \
         awk -v var="\$bc" -v 'OFS=\t' '{ if (length(\$1) == var) { print } }' | \
+        sort | \
         gzip -c > ${datasetID}_filtered_counts.tsv.gz
         """
+}
 
+/*
+* Statistic
+*/
+raw_ct_stats.concat(filter_ct_stats).into{ ct_stats_1; ct_stats_2 }
+
+process 'statistic_counts' {
+      label 'shorttime'
+
+      input:
+          tuple val(cond), val(rep), val(type), val(datasetID), val(countType),file(rc) from ct_stats_1
+      output:
+          tuple val(cond), val(rep), val(type), val(datasetID), val(countType), file("${datasetID}_${countType}_count.stats") into count_stats
+      shell:
+          """
+          paste <( echo "$cond") <( echo "$rep") <( echo "$type") \
+          <( zcat $rc | \
+            awk -v OFS='\t' 'BEGIN{pbar="NA"}{ count += \$NF; lines+=1; if (pbar != \$1) { barcodes+=1 }; pbar=\$1 }END{ print count,lines,barcodes }' ) \
+          <( zcat $rc | cut -f 2 | sort -u | wc -l ) \
+          > ${datasetID}_${countType}_count.stats
+          """
+}
+
+process 'count_stats_merge'{
+    label 'shorttime'
+
+    result = count_stats.groupTuple(by: 4).multiMap{i ->
+                              countType: i[4]
+                              files: i[5]
+                            }
+
+    input:
+        file(countStatFiles) from result.files
+        val(countType) from result.countType
+    output:
+        tuple val(countType),file("${countType}_count_stats.tsv") into count_stats_merge
+    script:
+        countStat = countStatFiles.collect{"$it"}.join(' ')
+    shell:
+        """
+        cat $countStat | sort -k1,1 -k3,3 -k2,2 > ${countType}_count_stats.tsv
+        """
+}
+
+process 'statistic_BC_in_RNA_DNA' {
+      label 'shorttime'
+
+      input:
+          tuple val(cond),val(rep),val(typeA),val(typeB),val(datasetIDA),val(datasetIDB),val(typeCount),file(countA),file(countB) from ct_stats_2.groupTuple(by: [0,1,4]).map{i -> i.flatten()}
+      output:
+          tuple val(cond), val(rep), val(typeCount), file("${cond}_${rep}_${typeCount}_BC_in_RNA_DNA.stats") into BC_in_RNA_DNA_stats
+      script:
+          def dna = typeA == 'DNA' ? countA : countB
+          def rna = typeA == 'DNA' ? countB : countA
+
+          """
+          paste <( echo "$cond") <( echo "$rep") \
+            <( join <( zcat $dna | cut -f 1 | sort | uniq ) \
+            <( zcat $rna | cut -f 1 | sort | uniq ) | wc -l ) \
+            > ${cond}_${rep}_${typeCount}_BC_in_RNA_DNA.stats
+          """
+}
+
+process 'stats_BC_in_RNA_DNA_merge'{
+    label 'shorttime'
+
+    result = BC_in_RNA_DNA_stats.groupTuple(by: 2).multiMap{i ->
+                              countType: i[2]
+                              files: i[3]
+                            }
+
+    input:
+        file(countStatFiles) from result.files
+        val(countType) from result.countType
+    output:
+        tuple val(countType),file("${countType}_BC_in_RNA_DNA.tsv") into stats_BC_in_RNA_DNA_merge
+    script:
+        countStat = countStatFiles.collect{"$it"}.join(' ')
+    shell:
+        """
+        cat $countStat | sort -k1,1 -k2,2 > ${countType}_BC_in_RNA_DNA.tsv
+        """
+}
+
+
+process 'stats_final'{
+    label 'shorttime'
+    publishDir "$params.outdir", mode:'copy'
+
+    conda 'conf/mpraflow_r.yml'
+
+    result = count_stats_merge.concat(stats_BC_in_RNA_DNA_merge).groupTuple(by: 0).multiMap{i ->
+                              countType: i[0]
+                              files: i[1]
+                            }
+
+    input:
+        file(statFiles) from result.files
+        val(countType) from result.countType
+    output:
+        tuple val(countType),file("statistic_${countType}_count.tsv") into count_stats_final
+    script:
+        def stat = statFiles.toList()
+        def count = stat[0]
+        def shared = stat[1]
+        """
+        Rscript ${"$baseDir"}/src/count/combine_count_stats.R --count $count --shared $shared --output statistic_${countType}_count.tsv
+        """
 }
 
 /*
 * STEP 4: Record overrepresended UMIs and final count table
 * contributions: Martin Kircher, Max Schubach, & Gracie Gordon
 */
+if (params.no_umi) {
+  process 'final_counts_no_UMI'{
+      label 'shorttime'
+      publishDir "$params.outdir/$cond/$rep", mode:'copy'
 
-process 'final_counts'{
-    label 'shorttime'
-    publishDir "$params.outdir/$cond/$rep"
+      input:
+          tuple val(cond), val(rep),val(type),val(datasetID),val(filteredType),file(fc) from filter_ct
+      output:
+          tuple val(cond), val(rep),val(type),val(datasetID),file("${datasetID}_counts.tsv.gz") into final_count
+      script:
+          """
+          #!/bin/bash
 
-    input:
-        tuple val(cond), val(rep),val(type),val(datasetID),file(fc) from filter_ct
-    output:
-        tuple val(cond), val(rep),val(type),val(datasetID),file("${datasetID}_counts.tsv") into final_count, final_count_satMut
-    script:
-        if(params.no_umi)
-            """
-            #!/bin/bash
+          zcat $fc | awk '{print \$1}' | \
+          uniq -c | \
+          gzip -c > ${datasetID}_counts.tsv.gz
+          """
+  }
+} else {
+  process 'final_counts'{
+      label 'shorttime'
+      publishDir "$params.outdir/$cond/$rep", mode:'copy'
 
-            zcat $fc | awk '{print \$1}' | \
-            uniq -c > ${datasetID}_counts.tsv
+      input:
+          tuple val(cond), val(rep),val(type),val(datasetID),val(filteredType),file(fc) from filter_ct
+      output:
+          file("${datasetID}_freqUMIs.txt") into frequent_UMI
+          tuple val(cond), val(rep),val(type),val(datasetID),file("${datasetID}_counts.tsv.gz") into final_count
+      script:
+          """
+          #!/bin/bash
 
-            """
-        else
-            """
-            #!/bin/bash
+          for i in $fc; do
+            echo \$(basename \$i);
+            zcat \$i | cut -f 2 | sort | uniq -c | sort -nr | head;
+            echo;
+          done > ${datasetID}_freqUMIs.txt
 
-            for i in $fc; do
-              echo \$(basename \$i);
-              zcat \$i | cut -f 2 | sort | uniq -c | sort -nr | head;
-              echo;
-            done > ${params.outdir}/${cond}/${rep}/${datasetID}_freqUMIs.txt
-
-            zcat $fc | awk '{print \$1}' | uniq -c > ${datasetID}_counts.tsv
-        """
-
+          zcat $fc | awk '{print \$1}' | \
+          uniq -c | \
+          gzip -c > ${datasetID}_counts.tsv.gz
+          """
+  }
 }
 
 /*
-* STEP 5: MPRAnalyze input generation (if option selected)
-* contributions: Gracie Gordon
+* STEP 5: Merge each DNA and RNA file
+* contributions: Gracie Gordon, Max Schubach
 */
 process 'dna_rna_merge_counts'{
     publishDir "$params.outdir/$cond/$rep", mode:'copy'
@@ -453,18 +574,26 @@ process 'dna_rna_merge_counts'{
     conda 'conf/mpraflow_py36.yml'
 
     input:
-        tuple val(cond),val(rep),val(typeA),val(typeB),val(datasetIDA),val(datasetIDB),file(countA),file(countB) from final_count_satMut.groupTuple(by: [0,1]).map{i -> i.flatten()}
+        tuple val(cond),val(rep),val(typeA),val(typeB),val(datasetIDA),val(datasetIDB),file(countA),file(countB) from final_count.groupTuple(by: [0,1]).map{i -> i.flatten()}
     output:
         tuple val(cond), val(rep), file("${cond}_${rep}_counts.tsv.gz") into merged_dna_rna
     script:
         def dna = typeA == 'DNA' ? countA : countB
         def rna = typeA == 'DNA' ? countB : countA
-        """
-        join -1 1 -2 1 -t"\$(echo -e '\\t')" \
-        <( cat  $dna | awk 'BEGIN{ OFS="\\t" }{ print \$2,\$1 }' | sort ) \
-        <( cat $rna | awk 'BEGIN{ OFS="\\t" }{ print \$2, \$1 }' | sort) | \
-        gzip -c > ${cond}_${rep}_counts.tsv.gz
-        """
+        if (!params.merge_intersect)
+            """
+            join -e 0 -a1 -a2 -t"\$(echo -e '\\t')" -o 0 1.2 2.2 \
+            <( zcat  $dna | awk 'BEGIN{ OFS="\\t" }{ print \$2,\$1 }' | sort ) \
+            <( zcat $rna | awk 'BEGIN{ OFS="\\t" }{ print \$2, \$1 }' | sort) | \
+            gzip -c > ${cond}_${rep}_counts.tsv.gz
+            """
+        else
+            """
+            join -1 1 -2 1 -t"\$(echo -e '\\t')" \
+            <( zcat  $dna | awk 'BEGIN{ OFS="\\t" }{ print \$2,\$1 }' | sort ) \
+            <( zcat $rna | awk 'BEGIN{ OFS="\\t" }{ print \$2, \$1 }' | sort) | \
+            gzip -c > ${cond}_${rep}_counts.tsv.gz
+            """
 }
 
 
@@ -472,28 +601,8 @@ process 'dna_rna_merge_counts'{
 //contributions: Gracie Gordon
 if(params.mpranalyze){
     /*
-    * STEP 5: Merge each DNA and RNA file
-    */
-    process 'dna_rna_mpranalyze_merge'{
-        publishDir "$params.outdir/$cond/$rep", mode:'copy'
-        label 'longtime'
-
-        conda 'conf/mpraflow_py36.yml'
-
-        input:
-            tuple val(cond),val(rep),val(typeA),val(typeB),val(datasetIDA),val(datasetIDB),file(countA),file(countB) from final_count.groupTuple(by: [0,1]).map{i -> i.flatten()}
-        output:
-            tuple val(cond), val(rep), file("${cond}_${rep}_counts.csv") into merged_ch
-        shell:
-            """
-            python ${"$baseDir"}/src/merge_counts.py ${typeA} ${countA} ${countB} ${cond}_${rep}_counts.csv
-            """
-    }
-
-
-    /*
     * STEP 6: Merge all DNA/RNA counts into one big file
-    * contributions: Gracie Gordon
+    * contributions: Gracie Gordon, Max Schubach
     */
 
     process 'final_merge'{
@@ -502,7 +611,7 @@ if(params.mpranalyze){
 
         conda 'conf/mpraflow_py36.yml'
 
-        result = merged_ch.groupTuple(by: 0).multiMap{i ->
+        result = merged_dna_rna.groupTuple(by: 0).multiMap{i ->
                                   cond: i[0]
                                   replicate: i[1].join(" ")
                                   files: i[2]
@@ -575,7 +684,7 @@ if(params.mpranalyze){
 
 /*
 * STEP 5: Merge each DNA and RNA file label with sequence and insert and normalize
-* contributions: Gracie Gordon
+* contributions: Gracie Gordon Max Schubach
 */
 //merge and normalize
 if(!params.mpranalyze && params.containsKey("association")){
@@ -587,21 +696,21 @@ if(!params.mpranalyze && params.containsKey("association")){
         conda 'conf/mpraflow_py36.yml'
 
         input:
-            tuple val(cond), val(rep),val(typeA),val(typeB),val(datasetIDA),val(datasetIDB),file(countA),file(countB) from final_count.groupTuple(by: [0,1]).map{i -> i.flatten()}
+            tuple val(cond), val(rep), file(counts) from merged_dna_rna
             file(des) from params.design_file
             file(association) from params.association_file
         output:
-             tuple val(cond), val(rep), file("${cond}_${rep}_counts.tsv") into merged_ch, merged_ch2
+             tuple val(cond), val(rep), file("${cond}_${rep}_assigned_counts.tsv.gz") into merged_ch, merged_ch2
         shell:
             """
-            python ${"$baseDir"}/src/merge_label.py ${typeA} ${countA} ${countB} $association $des ${params.merge_intersect} ${cond}_${rep}_counts.tsv
+            python ${"$baseDir"}/src/count/merge_label.py --counts ${counts} --assignment $association --design $des --output ${cond}_${rep}_assigned_counts.tsv.gz
             """
 
     }
 
     /*
     * STEP 6: Calculate correlations between Replicates
-    * contributions: Vikram Agarwal & Gracie Gordon
+    * contributions: Vikram Agarwal, Gracie Gordon, Max Schubach
     */
     process 'calc_correlations'{
         label 'shorttime'
@@ -611,7 +720,7 @@ if(!params.mpranalyze && params.containsKey("association")){
 
         result = merged_ch.groupTuple(by: 0).multiMap{i ->
                                   cond: i[0]
-                                  replicate: i[1].join(" ")
+                                  replicate: i[1].join(",")
                                   files: i[2]
                                 }
 
@@ -622,12 +731,12 @@ if(!params.mpranalyze && params.containsKey("association")){
             file(lab) from label_file
         output:
             file "*.png"
-            file "*_correlation.txt"
+            file "*.txt"
         script:
-            pairlist = pairlistFiles.collect{"$it"}.join(' ')
-            def label = lab.exists() ? lab : lab.name
+            pairlist = pairlistFiles.collect{"$it"}.join(',')
+            def label = lab.exists() ? "--label $lab" : ""
             """
-            Rscript ${"$baseDir"}/src/plot_perInsertCounts_correlation.R $cond $label $pairlist $replicate
+            Rscript ${"$baseDir"}/src/count/plot_perInsertCounts_correlation.R --condition $cond $label --files $pairlist --replicates $replicate --threshold $params.thresh
             """
     }
     /*
@@ -641,7 +750,7 @@ if(!params.mpranalyze && params.containsKey("association")){
 
         result = merged_ch2.groupTuple(by: 0).multiMap{i ->
                                   cond: i[0]
-                                  replicate: i[1].join(" ")
+                                  replicate: i[1].join(",")
                                   files: i[2]
                                 }
 
@@ -650,88 +759,14 @@ if(!params.mpranalyze && params.containsKey("association")){
             val(replicate) from result.replicate
             val(cond) from result.cond
         output:
-            file "average_allreps.tsv"
-            file "allreps.tsv"
+            file "average_allreps.tsv.gz"
+            file "allreps.tsv.gz"
         script:
-            pairlist = pairlistFiles.collect{"$it"}.join(' ')
+            pairlist = pairlistFiles.collect{"$it"}.join(',')
         shell:
             """
-            Rscript ${"$baseDir"}/src/make_master_tables.R $cond $params.thresh allreps.tsv average_allreps.tsv $pairlist $replicate
+            Rscript ${"$baseDir"}/src/count/make_master_tables.R --condition $cond --threshold $params.thresh --output allreps.tsv.gz --statistic average_allreps.tsv.gz --files $pairlist --replicates $replicate
             """
     }
 
 }
-
-
-/*
-* Completion e-mail notification
-*/
-
-/*
-workflow.onComplete {
-    // Set up the e-mail variables
-    def subject = "[NCBI-Hackathons/ATACFlow] Successful: $workflow.runName"
-    if(!workflow.success){
-      subject = "[NCBI-Hackathons/ATACFlow] FAILED: $workflow.runName"
-    }
-    def email_fields = [:]
-    email_fields['version'] = params.version
-    email_fields['runName'] = custom_runName ?: workflow.runName
-    email_fields['success'] = workflow.success
-    email_fields['dateComplete'] = workflow.complete
-    email_fields['duration'] = workflow.duration
-    email_fields['exitStatus'] = workflow.exitStatus
-    email_fields['errorMessage'] = (workflow.errorMessage ?: 'None')
-    email_fields['errorReport'] = (workflow.errorReport ?: 'None')
-    email_fields['commandLine'] = workflow.commandLine
-    email_fields['projectDir'] = workflow.projectDir
-    email_fields['summary'] = summary
-    email_fields['summary']['Date Started'] = workflow.start
-    email_fields['summary']['Date Completed'] = workflow.complete
-    email_fields['summary']['Pipeline script file path'] = workflow.scriptFile
-    email_fields['summary']['Pipeline script hash ID'] = workflow.scriptId
-    if(workflow.repository) email_fields['summary']['Pipeline repository Git URL'] = workflow.repository
-    if(workflow.commitId) email_fields['summary']['Pipeline repository Git Commit'] = workflow.commitId
-    if(workflow.revision) email_fields['summary']['Pipeline Git branch/tag'] = workflow.revision
-    email_fields['summary']['Nextflow Version'] = workflow.nextflow.version
-    email_fields['summary']['Nextflow Build'] = workflow.nextflow.build
-    email_fields['summary']['Nextflow Compile Timestamp'] = workflow.nextflow.timestamp
-    // Render the TXT template
-    def engine = new groovy.text.GStringTemplateEngine()
-    def tf = new File("$baseDir/assets/email_template.txt")
-    def txt_template = engine.createTemplate(tf).make(email_fields)
-    def email_txt = txt_template.toString()
-    // Render the HTML template
-    def hf = new File("$baseDir/assets/email_template.html")
-    def html_template = engine.createTemplate(hf).make(email_fields)
-    def email_html = html_template.toString()
-    // Render the sendmail template
-    def smail_fields = [ email: params.email, subject: subject, email_txt: email_txt, email_html: email_html, baseDir: "$baseDir", attach1: "$baseDir/results/Documentation/pipeline_report.html", attach2: "$baseDir/results/pipeline_info/NCBI-Hackathons/ATACFlow_report.html", attach3: "$baseDir/results/pipeline_info/NCBI-Hackathons/ATACFlow_timeline.html" ]
-    def sf = new File("$baseDir/assets/sendmail_template.txt")
-    def sendmail_template = engine.createTemplate(sf).make(smail_fields)
-    def sendmail_html = sendmail_template.toString()
-    // Send the HTML e-mail
-    if (params.email) {
-        try {
-          if( params.plaintext_email ){ throw GroovyException('Send plaintext e-mail, not HTML') }
-          // Try to send HTML e-mail using sendmail
-          [ 'sendmail', '-t' ].execute() << sendmail_html
-          log.info "[NCBI-Hackathons/ATACFlow] Sent summary e-mail to $params.email (sendmail)"
-        } catch (all) {
-          // Catch failures and try with plaintext
-          [ 'mail', '-s', subject, params.email ].execute() << email_txt
-          log.info "[NCBI-Hackathons/ATACFlow] Sent summary e-mail to $params.email (mail)"
-        }
-    }
-    // Write summary e-mail HTML to a file
-    def output_d = new File( "${params.outdir}/Documentation/" )
-    if( !output_d.exists() ) {
-      output_d.mkdirs()
-    }
-    def output_hf = new File( output_d, "pipeline_report.html" )
-    output_hf.withWriter { w -> w << email_html }
-    def output_tf = new File( output_d, "pipeline_report.txt" )
-    output_tf.withWriter { w -> w << email_txt }
-    log.info "[NCBI-Hackathons/ATACFlow] Pipeline Complete"
-}
-*/

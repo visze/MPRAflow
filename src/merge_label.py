@@ -12,25 +12,10 @@ import pickle
 from Bio import SeqIO
 
 #read in files
-if (sys.argv[1]=="DNA"):
-    dnaloc=sys.argv[2]
-    rnaloc=sys.argv[3]
-else:
-    dnaloc=sys.argv[3]
-    rnaloc=sys.argv[2]
-
-coord_file=sys.argv[4]
-design_file=sys.argv[5]
-merge_inter=str(sys.argv[6]).upper()
-
-outfile=sys.argv[7]
-
-#data=sys.argv[1]
-#coord_file=sys.argv[2]
-#rna_f=sys.argv[2]
-#assoc_f=sys.argv[2]
-#out_f=sys.argv[3]
-#design_file=sys.argv[4]
+merged_dna_rna_file = sys.argv[1]
+coord_file=sys.argv[2]
+design_file=sys.argv[3]
+outfile=sys.argv[4]
 
 #process fastq
 design=open(design_file)
@@ -46,46 +31,9 @@ for k,v in assoc.items():
          BC_key.setdefault(x,k)
 
 
-#dna rna pair, merge, and label
-#get files
 
-print(dnaloc)
-print(rnaloc)
-
-#get count dfs
-dna=pd.DataFrame(pd.read_csv(dnaloc,delim_whitespace=True,names=['dna_count','Barcode']))
-rna=pd.DataFrame(pd.read_csv(rnaloc,delim_whitespace=True,names=['rna_count','Barcode']))
-print('original')
-print(dna.head())
-print(rna.head())
-
-#convert to dask df for merging
-dk_dna=dd.from_pandas(dna,npartitions=1)
-print(dk_dna.head())
-dk_rna=dd.from_pandas(rna,npartitions=1)
-
-if(merge_inter=="TRUE"):
-    print('merge')
-    out=dd.merge(dk_dna,dk_rna, on=['Barcode'])
-    print(out.head())
-if(merge_inter=="FALSE"):
-    out=dd.merge(dk_dna,dk_rna, on=['Barcode'],how='outer')
-    print('merge')
-    print(out.head())
-    #get rid of NAs in dna and set rna NAs to zero
-    #out.fillna(0)
-    #out.isna()
-
-
-out=out[sorted(out.columns)]
-out=out.fillna(0)
-print('sorted')
-print(out.head())
-
-
-#back to pandas for labeling
-counts=out.compute()
-print('back2 pandas')
+#get count df
+counts=pd.read_csv(merged_dna_rna_file, sep='\t', header=None,names=['Barcode','dna_count','rna_count'])
 print(counts.head())
 #fill in labels from dictionary
 label=[]
@@ -111,11 +59,14 @@ counts.insert(0,'Sequence',seqs)
 counts.insert(0, 'Label', label)
 #print(counts)
 
-mask=(counts['Barcode'].str.len() == 15)
-#print(mask)
-counts[mask]
-counts_filtered_t = counts[mask]
-#counts_filtered=counts_filtered_t.sort_values(by=['log2'])
+
+# Filter barcodes to teh correct length
+# NOT NEEDED because already done in the pipeline
+
+# mask=(counts['Barcode'].str.len() == 15)
+# counts[mask]
+# counts_filtered_t = counts[mask]
+counts_filtered_t=counts
 
 
 #res <- as.data.frame(t(sapply(unique(data$name),FUN=function(x) { sel <- which(data$name == x); c(((sum(data$X[sel])+1)/(length(sel)+1))/sum(data$X)*10^6,((sum(data$Y[sel])+1)/(length(sel)+1))/sum(data$Y)*10^6,length(sel)) } )))
@@ -133,7 +84,7 @@ for i in set(counts_filtered_t.Label):
     #copied formula
     dna=(sum(sel.dna_count)+1)/((len(sel.dna_count)+1))/sum(counts_filtered_t.dna_count)*10**6
     rna=(sum(sel.rna_count)+1)/((len(sel.rna_count)+1))/sum(counts_filtered_t.rna_count)*10**6
-    #rna=((sum(counts_filtered_t.rna_count[sel])+1)/(length(sel)+1))/sum(counts_filtered_t.rna)*10^6
+
     res_temp=(pd.DataFrame([dna,rna,len(sel.dna_count)]))
     res_t=res_temp.transpose()
     res_t.rename(index={0:str(i)},inplace=True)
@@ -161,7 +112,7 @@ print(counts_filtered.head())
 
 print(outfile)
 
-counts_filtered.to_csv([outfile], index=False,sep='\t')
+counts_filtered.to_csv([outfile], index=False,sep='\t', compression='gzip')
 
 del res
 

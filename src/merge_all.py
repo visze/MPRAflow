@@ -20,7 +20,7 @@ for i in range(3,(len(sys.argv)-replicates-1)):
     #DNA 1 (condition A, replicate 1)
     colnames=["Barcode", "DNA %s (condition %s, replicate %s)" % (rep,cond,rep),
                          "RNA %s (condition %s, replicate %s)" % (rep,cond,rep)]
-    cur=pd.DataFrame(pd.read_csv(file,header='infer'))
+    cur=pd.DataFrame(pd.read_csv(file, sep='\t', header=None))
     print(cur.head())
     cur.columns=colnames
     cur_dk=dd.from_pandas(cur,npartitions=1)

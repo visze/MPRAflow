@@ -177,17 +177,20 @@ for(n in 1:(data%>%nrow)){
  #boxData$temp <- factor(boxData$temp, levels = levels(fac))
  #all$name=with(all,reorder(name,-log2,median))
  #print(head(all$bymedian))
- png(sprintf("%s_all_barcodesPerInsert_box.png",cond),width=800,height=800,type="cairo")
- bp<-ggplot(all, aes(x=name, y=log2, color=label)) +geom_boxplot()+xlab('insert')+ylab('log2 fold change')+
- theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-panel.background = element_blank(), axis.line = element_line(colour = "black"),axis.title.x = element_text(size=15),axis.title.y= element_text(size=15),axis.text.y=element_text(size=15),legend.text = element_text(size=15))
- print(bp)
- #boxplot(all$log2~bymedian, main='activity',xlab='enhancer', ylab='log2 fold change',las=2)
- #boxplot(all$log2~all$name,main='activity',xlab='enhancer', ylab='log2 fold change',las=2)
- dev.off()
- png(sprintf("%s_group_barcodesPerInsert_box.png",cond),width=800,height=800,type="cairo")
- bp<-ggplot(all, aes(x=label, y=log2, fill=label)) +geom_violin()+geom_boxplot(width=0.1,fill='white')+xlab('insert')+ylab('log2 fold change')+
- theme(axis.text.x = element_text(angle = 90, hjust=1,size=15),panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-panel.background = element_blank(), axis.line = element_line(colour = "black"),axis.title.x = element_text(size=15),axis.title.y= element_text(size=15),axis.text.y=element_text(size=15),legend.text = element_text(size=15))
- print(bp)
- dev.off()
+
+bp <- ggplot(all, aes(x=name, y=log2, color=label)) +
+      geom_boxplot() +
+      xlab('insert') +
+      ylab('log2 fold change') +
+      theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid.major=element_blank(), panel.grid.minor=element_blank(), panel.background=element_blank(), axis.line=element_line(colour="black"), axis.title.x=element_text(size=15), axis.title.y=element_text(size=15), axis.text.y=element_text(size=15), legend.text=element_text(size=15))
+
+ggsave(sprintf("%s_all_barcodesPerInsert_box.png",cond),bp,width=12,height=12,type="cairo")
+
+bp <- ggplot(all, aes(x=label, y=log2, fill=label)) +
+      geom_violin() +
+      geom_boxplot(width=0.1,fill='white') +
+      xlab('insert') +
+      ylab('log2 fold change') +
+      theme(axis.text.x=element_text(angle=90,hjust=1,size=15), panel.grid.major=element_blank(), panel.grid.minor=element_blank(), panel.background=element_blank(), axis.line=element_line(colour="black"), axis.title.x=element_text(size=15), axis.title.y=element_text(size=15), axis.text.y=element_text(size=15), legend.text=element_text(size=15))
+
+ggsave(sprintf("%s_group_barcodesPerInsert_box.png",cond),bp,width=12,height=12,type="cairo",)
