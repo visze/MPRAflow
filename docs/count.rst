@@ -40,7 +40,7 @@ Example file:
     GGCGCGCTTTTTCGAAGAAACCCGCCGGAGAATATAAGGGA
     >CRS4
     TTAGACCGCCCTTTACCCCGAGAAAACTCAGCTACACACTC
-    
+
 Association Pickle
 ------------------
 Python dictionary of CRS to Barcodes
@@ -61,7 +61,7 @@ Example file:
 
 Count.nf
 ============================
- 
+
 Options
 ---------------
 
@@ -72,7 +72,7 @@ With :code:`--help` or :code:`--h` you can see the help message.
   --e, --experiment-file        Experiment csv file
   --design                      Fasta of ordered insert sequences.
   --association                 Pickle dictionary from library association process.
- 
+
 **Optional:**
   --labels                      tsv with the oligo pool fasta and a group label (ex: positive_control), a single label will be applied if a file is not specified
   --outdir                      The output directory where the results will be saved (default outs)
@@ -93,7 +93,7 @@ create_BAM or create_BAM_noUMI (if no UMI sequence)
 
 raw_counts
   creates a table of counts for each barcode (where UMIs, if present, are deduplicated)
-  
+
 filter_counts
   Remove barcodes that are not the appropriate length
 
@@ -105,23 +105,23 @@ dna_rna_merge_counts or dna_rna_mpranalyze_merge
 
 final_merge (MPRAnalyze option only)
   Merge all DNA/RNA counts into one file
-  
+
 final_label (MPRAnalyze option only)
-  Label the barcodes 
-  
+  Label the barcodes
+
 generate_mpranalyze_inputs (MPRAnalyze option only)
-  Generate inputs for MPRAnalyze, counts tables and annotation tables for rna/dna 
-  
+  Generate inputs for MPRAnalyze, counts tables and annotation tables for rna/dna
+
 dna_rna_merge
   Merge each DNA and RNA file label with sequence and insert and normalize
-  
+
 calc_correlations
   Calculate correlations between Replicates
-  
+
 make_master_tables
   Create tables of each CRS normalized across replicates
 
-  
+
 Output
 ==========
 
@@ -136,8 +136,14 @@ File tree
 
     outdir
       |-Condition
-        |-allreps.tsv
-        |-average_allreps.tsv
+        |-allreps.tsv,gz
+        |-average_allreps.tsv.gz
+        |-HepG2_1_2_correlation_minThreshold.txt
+        |-HepG2_1_2_DNA_pairwise_minThreshold.png
+        |-HepG2_1_2_Ratio_pairwise_minThreshold.png
+        |-HepG2_1_2_RNA_pairwise_minThreshold.png
+        |-HepG2_all_barcodesPerInsert_box_minThreshold.png
+        |-HepG2_barcodesPerInsert_minThreshold.png
         |-HepG2_1_2_correlation.txt
         |-HepG2_1_2_DNA_pairwise.png
         |-HepG2_1_2_Ratio_pairwise.png
@@ -145,51 +151,64 @@ File tree
         |-HepG2_all_barcodesPerInsert_box.png
         |-HepG2_barcodesPerInsert.png
             |-Reps
-                |-HepG2_1_counts.tsv
                 |-HepG2_1_counts.tsv.gz
-                |-HepG2_1_DNA_counts.tsv
-                |-HepG2_1_DNA_raw_counts.tsv.gz  
-                |-HepG2_1_RNA_filtered_counts.tsv.gz
+                |-HepG2_1_DNA_counts.tsv.gz
                 |-HepG2_1_DNA_filtered_counts.tsv.gz
-                |-HepG2_1_RNA_counts.tsv
+                |-HepG2_1_DNA_freqUMIs.txt
+                |-HepG2_1_DNA_filtered_counts.tsv.gz
+                |-HepG2_1_RNA_counts.tsv.gz
+                |-HepG2_1_DNA_raw_counts.tsv.gz
+                |-HepG2_1_RNA_counts.tsv.gz
+                |-HepG2_1_RNA_filtered_counts.tsv.gz
+                |-HepG2_1_RNA_freqUMIs.txt
+                |-HepG2_1_RNA_filtered_counts.tsv.gz
+                |-HepG2_1_RNA_counts.tsv.gz
                 |-HepG2_1_RNA_raw_counts.tsv.gz
+      |-statistic_filtered_count.tsv
+      |-statistic_raw_count.tsv
 
 Files for each Condition
 ------------------------
-allreps.tsv
+statistic_filtered_count.tsv
+  Barcode and UMI statistic of filtered counts for all conditions (filtered means barcode and UMI must match the length given by `--bc-length` and `--umi-length`).
+statistic_raw_count.tsv
+  Barcode and UMI statistic of filtered counts for all conditions.
+allreps.tsv.gz
   TSV of normalized DNA and RNA count, ratio, log2ratio, and number of observed barcodes for each condition, replicate, of every CRS
-average_allreps.tsv
-  mean ratio, log2 ratio, and observed barcodes per condidition normalized for all replicates
-HepG2_1_2_correlation.txt
-  correlation values for a condition and 2 replicates (ie: HepG2 replicate 1 vs replicate 2)
-HepG2_1_2_DNA_pairwise.png
-  Correlation plot of DNA counts condition vs two reps (ie: HepG2 replicate 1 vs replicate 2)
-HepG2_1_2_Ratio_pairwise.png
-  Correlation plot of normalized log2(RNA/DNA) condition vs two reps (ie: HepG2 replicate 1 vs replicate 2)
-HepG2_1_2_RNA_pairwise.png
-  Correlation plot of RNA counts condition vs two reps (ie: HepG2 replicate 1 vs replicate 2)
-HepG2_all_barcodesPerInsert_box.png
-  Box plot of each CRS accross replicates for all barcodes in each condidtion. Colored by the label file.
-HepG2_barcodesPerInsert.png
-  Histogram of number of barcodes detected per CRS
-HepG2_group_barcodesPerInsert_box.png
-  Boxplot of CRS normalized per insert, grouped by labels
+average_allreps.tsv.gz
+  Mean ratio, log2 ratio, and observed barcodes per condidition normalized for all replicates
+HepG2_1_2_correlation.txt; HepG2_1_2_correlation_minThreshold.txt
+  Correlation values for a condition and 2 replicates (ie: HepG2 replicate 1 vs replicate 2). File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
+HepG2_1_2_DNA_pairwise.png; HepG2_1_2_DNA_pairwise_minThreshold.png
+  Correlation plot of DNA counts condition vs two reps (ie: HepG2 replicate 1 vs replicate 2). File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
+HepG2_1_2_Ratio_pairwise.png; HepG2_1_2_Ratio_pairwise_minThreshold.png
+  Correlation plot of normalized log2(RNA/DNA) condition vs two reps (ie: HepG2 replicate 1 vs replicate 2). File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
+HepG2_1_2_RNA_pairwise.png; HepG2_1_2_RNA_pairwise_minThreshold.png
+  Correlation plot of RNA counts condition vs two reps (ie: HepG2 replicate 1 vs replicate 2). File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
+HepG2_all_barcodesPerInsert_box.png; HepG2_all_barcodesPerInsert_box_minThreshold.png
+  Box plot of each CRS accross replicates for all barcodes in each condidtion. If too many instances will be downsampled to 10,000. Colored by the label file. File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
+HepG2_barcodesPerInsert.png; HepG2_barcodesPerInsert_minThreshold.png
+  Histogram of number of barcodes detected per CRS. File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
+HepG2_group_barcodesPerInsert_box.png; HepG2_group_barcodesPerInsert_box_minThreshold.png
+  Boxplot of CRS normalized per insert, grouped by labels. File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
 
-Files for each replicate in each condidtion
+Files for each replicate in each condition
 -------------------------------------------
-HepG2_1_counts.tsv  
-  mean ratio, log2 ratio, and observed barcodes per condidition for each replicate
 HepG2_1_counts.tsv.gz
   table of barcodes with DNA counts and RNA counts
-HepG2_1_DNA_counts.tsv              
+HepG2_1_DNA_counts.tsv
   table of barcodes with DNA counts
-HepG2_1_DNA_raw_counts.tsv.gz  
+HepG2_1_DNA_raw_counts.tsv.gz
   table of barcodes, UMI, and DNA counts raw
-HepG2_1_DNA_filtered_counts.tsv.gz  
+HepG2_1_DNA_filtered_counts.tsv.gz
   table of barcodes, UMI, and DNA counts raw, filtered for barcodes of correct length
+  HepG2_1_DNA_freqUMIs.txt
+    Top 10 frequent UMIs in DNA.
 HepG2_1_RNA_counts.tsv
   table of barcodes with RNA counts
 HepG2_1_RNA_raw_counts.tsv.gz
   table of barcodes, UMI, and RNA counts raw
 HepG2_1_RNA_filtered_counts.tsv.gz
   table of barcodes, UMI, and DNA counts raw, filtered for barcodes of correct length
+HepG2_1_RNA_freqUMIs.txt
+  Top 10 frequent UMIs in RNA.

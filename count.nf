@@ -279,7 +279,7 @@ if (!params.no_umi) {
             echo \$umi_length
             echo \$minoverlap
 
-            paste <( zcat $fw_fastq ) <( zcat $rev_fastq  ) <( zcat $umi_fastq ) | awk '{if (NR % 4 == 2 || NR % 4 == 0) {print \$1\$2\$3} else {print \$1}}' | python ${"$baseDir"}/src/FastQ2doubleIndexBAM.py -p -s \$rev_start -l 0 -m \$umi_length --RG ${datasetID} | python ${"$baseDir"}/src/MergeTrimReadsBAM.py --FirstReadChimeraFilter '' --adapterFirstRead '' --adapterSecondRead '' -p --mergeoverlap --minoverlap \$minoverlap > ${datasetID}.bam
+            paste <( zcat $fw_fastq ) <( zcat $rev_fastq  ) <( zcat $umi_fastq ) | awk '{if (NR % 4 == 2 || NR % 4 == 0) {print \$1\$2\$3} else {print \$1}}' | python ${"$baseDir"}/src/count/FastQ2doubleIndexBAM.py -p -s \$rev_start -l 0 -m \$umi_length --RG ${datasetID} | python ${"$baseDir"}/src/MergeTrimReadsBAM.py --FirstReadChimeraFilter '' --adapterFirstRead '' --adapterSecondRead '' -p --mergeoverlap --minoverlap \$minoverlap > ${datasetID}.bam
             """
     }
 }
@@ -329,7 +329,7 @@ if (params.no_umi) {
                   print \$1\$2
                 } else {
                   print \$1
-                }}' | python ${"$baseDir"}/src/FastQ2doubleIndexBAM.py -p -s \$rev_start -l 0 -m 0 --RG ${datasetID} | python ${"$baseDir"}/src/MergeTrimReadsBAM.py --FirstReadChimeraFilter '' --adapterFirstRead '' --adapterSecondRead '' -p --mergeoverlap  --minoverlap \$minoverlap> ${datasetID}.bam
+                }}' | python ${"$baseDir"}/src/count/FastQ2doubleIndexBAM.py -p -s \$rev_start -l 0 -m 0 --RG ${datasetID} | python ${"$baseDir"}/src/MergeTrimReadsBAM.py --FirstReadChimeraFilter '' --adapterFirstRead '' --adapterSecondRead '' -p --mergeoverlap  --minoverlap \$minoverlap> ${datasetID}.bam
               """
     }
 }
@@ -613,28 +613,36 @@ if(params.mpranalyze){
 
         result = merged_dna_rna.groupTuple(by: 0).multiMap{i ->
                                   cond: i[0]
-                                  replicate: i[1].join(" ")
+                                  replicates: i[1]
                                   files: i[2]
                                 }
 
+
         input:
             file(pairlistFiles) from result.files
-            val(replicate) from result.replicate
+            val(replicate) from result.replicates
             val(cond) from result.cond
         output:
-            tuple val(cond),file("${cond}_count.csv") into merged_out
+            tuple val(cond),file("${cond}_count.csv.gz") into merged_out
         script:
-            pairlist = pairlistFiles.collect{"$it"}.join(' ')
+            collected=pairlistFiles.collect{"$it"}
+            res=[]
+            for (i = 0; i < collected.size(); i++) {
+               f=collected[i]
+               r=replicate[i]
+               res.add("--counts $r $f")
+            }
+            counts=res.join(' ')
         shell:
             """
-            python ${"$baseDir"}/src/merge_all.py $cond "${cond}_count.csv" $pairlist $replicate
+            python ${"$baseDir"}/src/count/merge_all.py --condition $cond --output ${cond}_count.csv.gz $counts
             """
     }
 
 
     /*
     * STEP 7: Add label to outfile
-    * contributions: Gracie Gordon
+    * contributions: Gracie Gordon, Max Schubach
     */
 
     process 'final_label'{
@@ -648,16 +656,16 @@ if(params.mpranalyze){
             file(des) from params.design_file
             file(association) from params.association_file
         output:
-            tuple val(cond), file("${cond}_final_labeled_counts.txt") into labeled_out
+            tuple val(cond), file("${cond}_final_labeled_counts.tsv.gz") into labeled_out
         shell:
             """
-            python ${"$baseDir"}/src/label_final_count_mat.py $table $association "${cond}_final_labeled_counts.txt" $des
+            python ${"$baseDir"}/src/count/label_final_count_mat.py --counts $table --assignment $association --output ${cond}_final_labeled_counts.tsv.gz --design $des
             """
     }
 
     /*
     * STEP 8: Generate inputs
-    * contributions: Tal Ashuach
+    * contributions: Tal Ashuach, Max Schubach
     */
 
     process 'generate_mpranalyze_inputs'{
@@ -669,13 +677,13 @@ if(params.mpranalyze){
         input:
             tuple val(cond),file(labeled_file) from labeled_out
         output:
-            file("rna_counts.tsv") into mpranalyze_rna_counts
-            file("dna_counts.tsv") into mpranalyze_dna_counts
-            file("rna_annot.tsv") into mpranalyze_rna_annotation
-            file("dna_annot.tsv") into mpranalyze_fna_annotation
+            file("rna_counts.tsv.gz") into mpranalyze_rna_counts
+            file("dna_counts.tsv.gz") into mpranalyze_dna_counts
+            file("rna_annot.tsv.gz") into mpranalyze_rna_annotation
+            file("dna_annot.tsv.gz") into mpranalyze_fna_annotation
         shell:
             """
-            python ${"$baseDir"}/src/mpranalyze_compiler.py $labeled_file
+            python ${"$baseDir"}/src/count/mpranalyze_compiler.py --input $labeled_file --rna-counts-output rna_counts.tsv.gz --dna-counts-output dna_counts.tsv.gz --rna-annotation-output rna_annot.tsv.gz --dna-annotation-output dna_annot.tsv.gz
             """
     }
 

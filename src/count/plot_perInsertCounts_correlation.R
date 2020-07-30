@@ -145,8 +145,8 @@ if(data %>% nrow >1){
       res$label = 'NA'
     }
 
-    plot_correlations(res,cond,r1,r2,"pairwise_minThreshold")
-    write_correlation(res,cond,r1,r2,"correlation_minThreshold")
+    plot_correlations(res,cond,r1,r2,"pairwise")
+    write_correlation(res,cond,r1,r2,"correlation")
     res <- res %>% filter(n_obs_bc.x >= thresh, n_obs_bc.y >= thresh)
     plot_correlations(res,cond,r1,r2,"pairwise_minThreshold")
     write_correlation(res,cond,r1,r2,"correlation_minThreshold")
@@ -195,21 +195,35 @@ all=all[order(all$log2),]
 bymedian=with(all,reorder(name,-log2,median,order=TRUE))
 all$name=factor(all$name,levels=levels(bymedian))
 
-all_subsample <- all %>% group_by(label) %>% sample_n(min(1000,n)) %>% ungroup()
 
-bp <- ggplot(all_subsample, aes(x=name, y=log2, color=label)) +
+
+plotAllBarcodesPerInsert <- function(data){
+  bp <- ggplot(data, aes(x=name, y=log2, color=label)) +
       geom_boxplot() +
       xlab('insert') +
       ylab('log2 fold change') +
-      theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid.major=element_blank(), panel.grid.minor=element_blank(), panel.background=element_blank(), axis.line=element_line(colour="black"), axis.title.x=element_text(size=15), axis.title.y=element_text(size=15), axis.text.y=element_text(size=15), legend.text=element_text(size=15))
+      theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid.major=element_blank(), panel.grid.minor=element_blank(), panel.background=element_blank(), axis.line=element_line(colour="black"), axis.title.x=element_text(size=15), axis.title.y=element_text(size=15), axis.text.y=element_text(size=15), legend.text=element_text(size=15))  
+    return(bp)
+}
 
-ggsave(sprintf("%s_all_barcodesPerInsert_box.png",cond),bp)
-
-bp <- ggplot(all, aes(x=label, y=log2, fill=label)) +
+plotGroupbarcodesPerInsert <- function(data){
+  bp <- ggplot(data, aes(x=label, y=log2, fill=label)) +
       geom_violin() +
       geom_boxplot(width=0.1,fill='white') +
       xlab('insert') +
       ylab('log2 fold change') +
       theme(axis.text.x=element_text(angle=90,hjust=1,size=15), panel.grid.major=element_blank(), panel.grid.minor=element_blank(), panel.background=element_blank(), axis.line=element_line(colour="black"), axis.title.x=element_text(size=15), axis.title.y=element_text(size=15), axis.text.y=element_text(size=15), legend.text=element_text(size=15))
+    return(bp)
+}
 
+all_subsample <- all %>% sample_n(min(10000,all%>%nrow))
+
+bp <- plotAllBarcodesPerInsert(all_subsample)
+ggsave(sprintf("%s_all_barcodesPerInsert_box.png",cond),bp)
+bp <- plotAllBarcodesPerInsert(all_subsample %>% filter(n_obs_bc >= thresh))
+ggsave(sprintf("%s_all_barcodesPerInsert_box_minThreshold.png",cond),bp)
+
+bp <- plotGroupbarcodesPerInsert(all)
 ggsave(sprintf("%s_group_barcodesPerInsert_box.png",cond),bp)
+bp <- plotGroupbarcodesPerInsert(all %>% filter(n_obs_bc >= thresh))
+ggsave(sprintf("%s_group_barcodesPerInsert_box_minThreshold.png",cond),bp)

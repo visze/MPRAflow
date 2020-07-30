@@ -1,17 +1,15 @@
-#Author: Gracie Gordon 2019
-#merge tables
+# this script processes the RNA and DNA counts and assigns the enhancer tag
+#outputs dataframe
 
-import sys
-import pandas as pd
-import numpy as np
+#CMD: python label_count_mat.py test.merged.H2.tsv ../lib_assoc_scripts/mp_assoc_original/bc_info_mp/Gracie_mp_filtered_coords_to_barcodes.pickle test.log2.fold.txt 
 
-import math
 import pickle
+import click
+import numpy
+import pandas
+import sys
 
 from Bio import SeqIO
-
-import click
-
 
 # options
 @click.command()
@@ -36,21 +34,20 @@ import click
               type=click.Path(writable=True),
               help='Output file.')
 def cli(counts_file, assignment_file, design_file, output_file):
-
+    
     # process fastq
     design=open(design_file)
     fasta_dict = {rec.id : rec.seq for rec in SeqIO.parse(design, "fasta")}
 
-    assoc=pickle.load(open(assignment_file,'rb'))
+    assoc=pickle.load( open(assignment_file,'rb'))
 
+    #flip dict so that BCs are the Keys
     BC_key = {}
     for k,v in assoc.items():
         for x in v:
              BC_key.setdefault(x,k)
-
-
-    #get count df
-    counts=pd.read_csv(counts_file, sep='\t', header=None,names=['Barcode','dna_count','rna_count'])
+    
+    counts=pandas.read_csv(counts_file,header='infer',sep=',')
 
     #fill in labels from dictionary
     label=[]
@@ -67,41 +64,11 @@ def cli(counts_file, assignment_file, design_file, output_file):
         except:
             seqs.append('NA')
     counts.insert(0,'Sequence',seqs)
-    counts.insert(0, 'name', label)
+    counts.insert(0, 'label', label)
+    click.echo(counts.head())
 
-    counts.drop(['Sequence', 'Barcode'], axis=1, inplace=True)
-
-
-    grouped_label = counts.groupby(counts['name']).agg({'dna_count' : ['sum', 'count'], 'rna_count' : ['sum', 'count']})
-
-    grouped_label.reset_index(inplace=True)
-
-    output = pd.DataFrame()
-
-    click.echo(grouped_label.head())
-
-    output['name'] = grouped_label['name']
-    output['dna_counts'] = grouped_label.dna_count['sum']
-    output['rna_counts'] = grouped_label.rna_count['sum']
-
-    total_dna_counts=sum(grouped_label.dna_count['sum'])
-
-    output['dna_normalized']=(grouped_label.dna_count['sum']+1)/((grouped_label.dna_count['count']+1))/total_dna_counts*10**6
-
-    total_rna_counts=sum(grouped_label.rna_count['sum'])
-
-    output['rna_normalized']=(grouped_label.rna_count['sum']+1)/((grouped_label.rna_count['count']+1))/total_rna_counts*10**6
-
-
-    output['ratio'] = output.rna_normalized/output.dna_normalized
-    output['log2'] = np.log2(output.ratio)
-
-    output['n_obs_bc'] = grouped_label.dna_count['count']
-
-
-    click.echo(output_file)
-
-    output.to_csv(output_file, index=False,sep='\t', compression='gzip')
+    counts.to_csv(output_file,header=True,index=False,sep="\t") 
 
 if __name__ == '__main__':
     cli()
+
