@@ -1,4 +1,4 @@
-#contributed by Tal Ashuach
+#contributed by Tal Ashuach, Max Schubach
 
 import os
 import re
@@ -53,62 +53,54 @@ def cli(input_file, rna_counts_output_file, dna_counts_output_file, rna_annotati
     # remove unknown BC
     df = df[df['label']!='no_BC'].set_index('label').fillna(0)
 
+
     # get replicates and DNA/RNAs
     header_annot = [get_annot(h) for h in list(df.columns)[2:]]
-    dna_annot = [h for h in header_annot if h[0] == 'DNA']
-    rna_annot = [h for h in header_annot if h[0] == 'RNA']
+    dna_annot = pd.DataFrame([h for h in header_annot if h[0] == 'DNA']).rename(columns={0: "type", 1: "condition", 2 : "replicate"})
+    rna_annot = pd.DataFrame([h for h in header_annot if h[0] == 'RNA']).rename(columns={0: "type", 1: "condition", 2 : "replicate"})
     n_dna_obs = len(dna_annot)
     n_rna_obs = len(rna_annot)
 
     # counts for observation
-    # rna_dict = defaultdict(list)
-    # dna_dict = defaultdict(list)
 
     dna_df = df.iloc[:,2:(2+n_dna_obs)].applymap(np.int64)
     rna_df = df.iloc[:,(2+n_dna_obs):].applymap(np.int64)
 
-
+    ## generate output DNA/RNA annotations (type_condition_replicate_barcode)
     n_bc = df.groupby('label').Barcode.agg(len).max()
+    def generateAnnotationOutput(data, number_barcodes):
+        data = data.loc[data.index.repeat(number_barcodes)]
+        data['barcode'] = data.groupby(['type','condition','replicate']).cumcount() +1
+        data['barcode'] = data['barcode'].astype(str)
+        data['sample'] = data[['type','condition','replicate','barcode']].agg('_'.join,axis=1)
+        data = data[["sample", "type", "condition", "replicate", "barcode"]]
+        return(data)
+    dna_annot = generateAnnotationOutput(dna_annot, n_bc)
+    rna_annot = generateAnnotationOutput(rna_annot, n_bc)
 
-    ## write output DNA annotations
-    dna_colnames = []
-    with gzip.open(dna_annotation_output_file, 'wt') as ofile:
-        ofile.write('\t'.join(["sample", "type", "condition", "replicate", "barcode"]) + '\n')
-        for i in range(1, n_bc + 1):
-            for x in dna_annot:
-                sample_name = '_'.join(list(x) + [str(i)])
-                dna_colnames.append(sample_name)
-                ofile.write('\t'.join([sample_name] + list(x) + [str(i)]) + '\n')
+    ## generate output DNA/RNA count tables
+    ## rows oligo/seq ids,/assignment then per barcode the counts. padding with zeros
+    def generateCountOutput(data,columns):
+        counts = pd.DataFrame(list(data.groupby('label').apply(lambda x: x.values.flatten()))).fillna(0).astype(np.int64)
+        counts.columns = columns
+        counts['seq_id'] = data.index.unique()
+        counts = counts[(['seq_id'] + list(columns))]
+        return(counts)
 
-    ## write output DNA counts
-    with gzip.open(dna_counts_output_file, 'wt') as ofile:
-        ofile.write('\t'.join(['seq_id'] + dna_colnames) + '\n')
-        for seq_id in dna_df.index.unique():
-            ofile.write('\t'.join(
-                [seq_id] + # sequence ID
-                list(map(str,dna_df.loc[seq_id].values.flatten())) + # flattened list of observations
-                (['0'] * n_dna_obs * (n_bc - dna_df.loc[seq_id].index.size)) # zero padding
-                ) + '\n')
+    dna_counts = generateCountOutput(dna_df,dna_annot['sample'])
+    rna_counts = generateCountOutput(rna_df,rna_annot['sample'])
 
-    ## write output RNA annotations
-    rna_colnames = []
-    with gzip.open( rna_annotation_output_file, 'wt') as ofile:
-        ofile.write('\t'.join(["sample", "type", "condition", "replicate", "barcode"]) + '\n')
-        for i in range(1, n_bc + 1):
-            for x in rna_annot:
-                sample_name = '_'.join(list(x) + [str(i)])
-                rna_colnames.append(sample_name)
-                ofile.write('\t'.join([sample_name] + list(x) + [str(i)]) + '\n')
+    ## write table function
+    def write(data,file):
+        data.to_csv(file, index=False,sep='\t', compression='gzip')
 
-    ## write output RNA counts
-    with gzip.open(rna_counts_output_file, 'wt') as ofile:
-        ofile.write('\t'.join(['seq_id'] + rna_colnames) + '\n')
-        for seq_id in rna_df.index.unique():
-            ofile.write('\t'.join(
-                [seq_id] + # sequence ID
-                list(map(str,rna_df.loc[seq_id].values.flatten())) + # flattened list of observations
-                (['0'] * n_dna_obs * (n_bc - rna_df.loc[seq_id].index.size)) # zero padding
-                ) + '\n')
+    ## write output DNA/RNA annotations
+    write(dna_annot,dna_annotation_output_file)
+    write(rna_annot,rna_annotation_output_file)
+
+    ## write output DNA/RNA annotations
+    write(dna_counts,dna_counts_output_file)
+    write(rna_counts,rna_counts_output_file)
 
 if __name__ == '__main__':
     cli()

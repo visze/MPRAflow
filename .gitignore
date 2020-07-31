@@ -12,7 +12,7 @@ tmp/
 HK_inputs/
 
 # c compiled python
-src/*.pyc
+*.pyc
 
 .sam
 .bam
