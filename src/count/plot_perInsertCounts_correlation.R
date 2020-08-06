@@ -125,7 +125,7 @@ writeCorrelationPlots <- function(plots, name){
   correlation_plots <- cowplot::plot_grid(plotlist = plots, ncol = 1)
   # correlation_plots <- do.call("grid.arrange", c(plots))
 
-  ggsave(name,correlation_plots,width=15,height=15*length(plots))
+  ggsave(name,correlation_plots,width=10,height=15*length(plots))
 }
 
 writeCorrelation <- function(correlations, name){

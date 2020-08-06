@@ -699,7 +699,7 @@ if(!params.mpranalyze && params.containsKey("association")){
 
     process 'dna_rna_merge'{
         label 'longtime'
-        publishDir "$params.outdir/$cond/$rep", mode:'copy'
+        publishDir "$params.outdir/$cond/$rep", mode:'copy', pattern: '*_*_assigned_counts.tsv.gz'
 
         conda 'conf/mpraflow_py36.yml'
 
@@ -709,14 +709,77 @@ if(!params.mpranalyze && params.containsKey("association")){
             file(association) from params.association_file
         output:
              tuple val(cond), val(rep), file("${cond}_${rep}_assigned_counts.tsv.gz") into merged_ch, merged_ch2
+             tuple val(cond), val(rep), file("${cond}_${rep}_assigned_counts.statistic.tsv.gz") into assigned_stats
         shell:
             """
             python ${"$baseDir"}/src/count/merge_label.py --counts ${counts} \
             --minRNACounts 0 --minDNACounts 0 \
             --assignment $association --design $des \
-            --output ${cond}_${rep}_assigned_counts.tsv.gz
+            --output ${cond}_${rep}_assigned_counts.tsv.gz \
+            --statistic ${cond}_${rep}_assigned_counts.statistic.tsv.gz
             """
 
+    }
+
+    // collect statistics per condition
+    process 'combine_stats_dna_rna_merge' {
+        label 'shorttime'
+        publishDir "$params.outdir/$cond", mode:'copy'
+
+        conda 'conf/mpraflow_py36.yml'
+
+        result = assigned_stats.groupTuple(by: 0, sort: true).multiMap{i ->
+                                  cond: i[0]
+                                  replicate: i[1]
+                                  files: i[2]
+                                }
+
+          input:
+              file(pairlistFiles) from result.files
+              val(replicate) from result.replicate
+              val(cond) from result.cond
+        output:
+             file("${cond}_assigned_counts.statistic.tsv.gz") into statistic_assignment_per_cond
+       script:
+           collected = pairlistFiles.collect{"$it"}
+           res=[]
+           for (i = 0; i < collected.size(); i++) {
+              f=collected[i]
+              r=replicate[i]
+              res.add("--statistic $r $f")
+           }
+           statistic=res.join(' ')
+        shell:
+            """
+            python ${"$baseDir"}/src/count/merge_statistic_tables.py \
+            --condition $cond \
+            $statistic \
+            --output ${cond}_assigned_counts.statistic.tsv.gz
+            """
+    }
+
+    // cobine statistics of all conditions
+    process 'combine_stats_dna_rna_merge_all' {
+        label 'shorttime'
+        publishDir "$params.outdir", mode:'copy'
+
+        conda 'conf/mpraflow_py36.yml'
+
+        result = statistic_assignment_per_cond.collect("$it"}.join(','))
+
+          input:
+              file(statistic_per_cond) from statistic_assignment_per_cond
+        output:
+             file("statistic_assigned_counts.tsv.gz")
+        script:
+           collected = statistic_per_cond.collect{"$it"}.join(' ')
+        shell:
+            """
+            (zcat $collected | head -n 1;
+              for i in $collected; do
+                zcat \$i | tail -n +2
+              done) | gzip -c > statistic_assigned_counts.tsv.gz
+            """
     }
 
     /*

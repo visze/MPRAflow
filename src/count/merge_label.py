@@ -47,8 +47,22 @@ import click
               required=True,
               type=click.Path(writable=True),
               help='Output file.')
-def cli(counts_file, assignment_file, design_file, minRNACounts, minDNACounts, output_file):
+@click.option('--statistic',
+              'statistic_file',
+              required=True,
+              type=click.Path(writable=True),
+              help='Statistic output file.')
+def cli(counts_file, assignment_file, design_file, minRNACounts, minDNACounts, output_file, statistic_file):
     pseudocount = 1 if minRNACounts == 0 or minDNACounts == 0 else 0
+
+    # statistic
+    statistic = pd.DataFrame(data={'oligos design': [0], 'barcodes design' : [0],
+                    'oligos dna/rna' : [0],  'barcodes dna/rna' : [0],
+                    'matched barcodes' : [0], 'unknown barcodes dna/rna' : [0],
+                    '% matched barcodes' : [0.0],
+                    'total dna counts' : [0], 'total rna counts' : [0],
+                    'avg dna counts per bc' : [0.0], 'avg rna counts per bc' : [0.0],
+                    'avg dna/rna barcodes per oligo' : [0.0]})
 
     # process fastq
     design=open(design_file)
@@ -56,23 +70,29 @@ def cli(counts_file, assignment_file, design_file, minRNACounts, minDNACounts, o
 
     assoc=pickle.load(open(assignment_file,'rb'))
 
+    statistic['oligos design'] = len(assoc)
+
     BC_key = {}
     for k,v in assoc.items():
+        statistic[['barcodes design']] += len(v)
         for x in v:
              BC_key.setdefault(x,k)
 
 
     #get count df
     counts=pd.read_csv(counts_file, sep='\t', header=None,names=['Barcode','dna_count','rna_count'])
+    statistic['barcodes dna/rna'] = counts.shape[0]
 
     #fill in labels from dictionary
     label=[]
     for i in counts.Barcode:
-       try:
-               label.append(BC_key[i])
-       except:
-               label.append('no_BC')
-
+        try:
+           label.append(BC_key[i])
+        except:
+           statistic[['unknown barcodes dna/rna']] += 1
+           label.append('no_BC')
+    statistic['matched barcodes'] = statistic['barcodes dna/rna'] - statistic['unknown barcodes dna/rna']
+    statistic['% matched barcodes'] = (statistic['matched barcodes']/statistic['barcodes dna/rna'])*100.0
     # INFO: sequence is not needed becaus enot printed out
     # seqs=[]
     # for l in label:
@@ -92,11 +112,14 @@ def cli(counts_file, assignment_file, design_file, minRNACounts, minDNACounts, o
     total_dna_counts=sum(counts['dna_count'])
     total_rna_counts=sum(counts['rna_count'])
 
+    statistic['total dna counts']=total_dna_counts
+    statistic['total rna counts']=total_rna_counts
+    statistic['avg dna counts per bc'] = statistic['total dna counts']/statistic['barcodes dna/rna']
+    statistic['avg rna counts per bc'] = statistic['total rna counts']/statistic['barcodes dna/rna']
+
     # filter
     counts = counts[counts['dna_count']>=minDNACounts]
     counts = counts[counts['rna_count']>=minRNACounts]
-
-
 
     grouped_label = counts.groupby(counts['name']).agg({'dna_count' : ['sum', 'count'], 'rna_count' : ['sum', 'count']})
 
@@ -110,7 +133,10 @@ def cli(counts_file, assignment_file, design_file, minRNACounts, minDNACounts, o
     output['dna_counts'] = grouped_label.dna_count['sum']
     output['rna_counts'] = grouped_label.rna_count['sum']
 
-
+    statistic['oligos dna/rna'] = len(grouped_label)-1
+    statistic['avg dna/rna barcodes per oligo'] = sum(
+                grouped_label[grouped_label['name']!='no_BC'].dna_count['count']
+            )/statistic['oligos dna/rna']
 
     scaling = 10**min([len(str(total_dna_counts))-1,len(str(total_rna_counts))-1])
     scaling = 10**6
@@ -130,6 +156,8 @@ def cli(counts_file, assignment_file, design_file, minRNACounts, minDNACounts, o
     click.echo(output_file)
 
     output.to_csv(output_file, index=False,sep='\t', compression='gzip')
+
+    statistic.to_csv(statistic_file, index=False,sep='\t', compression='gzip')
 
 if __name__ == '__main__':
     cli()
