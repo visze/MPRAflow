@@ -69,7 +69,7 @@ print(data)
 # pairwise comparison only if more than one replicate
 thresh=opt$threshold
 
-plot_correlations <- function(data,condition,r1,r2,name){
+plot_correlations_dna <- function(data,condition,r1,r2,name){
   dna_p <- ggplot(data, aes(log2(dna_normalized.x), log2(dna_normalized.y))) +
               geom_point(aes(colour = label), show.legend = TRUE) +
               xlim(-5,5) + ylim(-5,5) +
@@ -79,8 +79,9 @@ plot_correlations <- function(data,condition,r1,r2,name){
               geom_text(x=0, y=4, label=sprintf("rho = %.2f", cor(data$dna_normalized.x,data$dna_normalized.y,method="spearman")),size=10) +
               geom_abline(intercept = 0, slope = 1) +
               theme_classic(base_size = 30)
-  ggsave(sprintf("%s_%s_%s_DNA_%s.png",condition,as.character(r1),as.character(r2),name), plot=dna_p, width=15,height=15)
-
+  return(dna_p)
+}
+plot_correlations_rna <- function(data,condition,r1,r2,name){
   rna_p <- ggplot(data, aes(log2(rna_normalized.x), log2(rna_normalized.y))) +
               geom_point(aes(colour = label), show.legend = TRUE) +
               xlim(-5,5) + ylim(-5,5) +
@@ -90,8 +91,9 @@ plot_correlations <- function(data,condition,r1,r2,name){
               geom_text(x=0, y=4, label=sprintf("rho = %.2f", cor(data$rna_normalized.x,data$rna_normalized.y,method="spearman")),size=10) +
               geom_abline(intercept = 0, slope = 1) +
               theme_classic(base_size = 30)
-  ggsave(sprintf("%s_%s_%s_RNA_%s.png",condition,as.character(r1),as.character(r2),name), plot=rna_p,width=15,height=15)
-
+  return(rna_p)
+}
+plot_correlations_ratio <- function(data,condition,r1,r2,name){
   ratio_p <- ggplot(data, aes(log2(ratio.x), log2(ratio.y))) +
                 geom_point(aes(colour = label), show.legend = TRUE) +
                 xlim(-5,5) + ylim(-5,5) +
@@ -101,20 +103,33 @@ plot_correlations <- function(data,condition,r1,r2,name){
                 geom_text(x=0, y=4, label=sprintf("rho = %.2f", cor(data$ratio.x,data$ratio.y,method="spearman")),size=10) +
                 geom_abline(intercept = 0, slope = 1) +
                 theme_classic(base_size = 30)
-  ggsave(sprintf("%s_%s_%s_Ratio_%s.png",condition,as.character(r1),as.character(r2),name), plot=ratio_p,width=15,height=15)
+  return(ratio_p)
 }
 
-write_correlation <- function(data,condition,r1,r2,name){
-  outs = as.character(sprintf("%s vs %s:  RNA: %.5f DNA: %.5f ratio: %.5f NormSymmetry: %d",r1,r2,
-      cor(data$rna_normalized.x,data$rna_normalized.y,method="spearman"),
-      cor(data$dna_normalized.x,data$dna_normalized.y,method="spearman"),
-      cor(data$ratio.x,data$ratio.y,method="spearman"),
-      abs(length(which((data$ratio.x-data$ratio.y)>0))-length(which((data$ratio.x-data$ratio.y)<0)))
-      + abs(length(which((data$ratio.x-data$ratio.y)>0))-length(which((data$ratio.x-data$ratio.y)<0)))
-      + abs(length(which((data$ratio.x-data$ratio.y)>0))-length(which((data$ratio.x-data$ratio.y)<0)))
-  ))
+getCorrelationStats <- function(data,condition,r1,r2,name){
 
-  write(outs,file=sprintf("%s_%s_%s_%s.txt",condition,as.character(r1),as.character(r2),name),append=TRUE)
+  norm <- abs(length(which((data$ratio.x-data$ratio.y)>0)) - length(which((data$ratio.x-data$ratio.y)<0)))
+  + abs(length(which((data$ratio.x-data$ratio.y)>0))-length(which((data$ratio.x-data$ratio.y)<0)))
+  + abs(length(which((data$ratio.x-data$ratio.y)>0))-length(which((data$ratio.x-data$ratio.y)<0)))
+  outs <- data.frame(
+                Comparison = sprintf("%s vs %s",r1,r2),
+                DNA = sprintf("%.5f", cor(data$dna_normalized.x,data$dna_normalized.y,method="spearman")),
+                RNA = sprintf("%.5f", cor(data$rna_normalized.x,data$rna_normalized.y,method="spearman")),
+                Ratio = sprintf("%.5f", cor(data$ratio.x,data$ratio.y,method="spearman")),
+                NormSymmetry=norm, stringsAsFactors=FALSE)
+  return(outs)
+
+}
+
+writeCorrelationPlots <- function(plots, name){
+  correlation_plots <- cowplot::plot_grid(plotlist = plots, ncol = 1)
+  # correlation_plots <- do.call("grid.arrange", c(plots))
+
+  ggsave(name,correlation_plots,width=15,height=15*length(plots))
+}
+
+writeCorrelation <- function(correlations, name){
+    write.table(correlations,file=name,quote=FALSE,sep='\t',row.names=FALSE,col.names=TRUE )
 }
 
 if(data %>% nrow >1){
@@ -124,7 +139,14 @@ if(data %>% nrow >1){
   print('sel')
   print(selected)
 
-
+  plots_correlations_rna = list()
+  plots_correlations_dna = list()
+  plots_correlations_ratio = list()
+  plots_correlations_minThreshold_rna = list()
+  plots_correlations_minThreshold_dna = list()
+  plots_correlations_minThreshold_ratio = list()
+  stats_correlations = data.frame()
+  stats_correlations_minThreshold = data.frame()
   print('reps')
   for(i in seq(1,dim(selected)[2])){
     print(selected[,i])
@@ -135,8 +157,8 @@ if(data %>% nrow >1){
 
 
     # Remove unassigned barcodes
-    data1<-data1 %>% filter(name != 'no_BC')
-    data2<-data2 %>% filter(name != 'no_BC')
+    data1 <- data1 %>% filter(name != 'no_BC')
+    data2 <- data2 %>% filter(name != 'no_BC')
 
     res <- data1 %>% inner_join(data2,by=c('name'))
     if (useLabels){
@@ -145,12 +167,30 @@ if(data %>% nrow >1){
       res$label = 'NA'
     }
 
-    plot_correlations(res,cond,r1,r2,"pairwise")
-    write_correlation(res,cond,r1,r2,"correlation")
+    plots_correlations_dna[[i]] <- plot_correlations_dna(res,cond,r1,r2,"pairwise")
+    plots_correlations_rna[[i]] <- plot_correlations_rna(res,cond,r1,r2,"pairwise")
+    plots_correlations_ratio[[i]] <- plot_correlations_ratio(res,cond,r1,r2,"pairwise")
+
+    stats_correlations <- stats_correlations %>% bind_rows(getCorrelationStats(res,cond,r1,r2,"correlation"))
+
+    # Min Threshold
     res <- res %>% filter(n_obs_bc.x >= thresh, n_obs_bc.y >= thresh)
-    plot_correlations(res,cond,r1,r2,"pairwise_minThreshold")
-    write_correlation(res,cond,r1,r2,"correlation_minThreshold")
+    plots_correlations_minThreshold_dna[[i]] <- plot_correlations_dna(res,cond,r1,r2,"pairwise_minThreshold")
+    plots_correlations_minThreshold_rna[[i]] <- plot_correlations_rna(res,cond,r1,r2,"pairwise_minThreshold")
+    plots_correlations_minThreshold_ratio[[i]] <- plot_correlations_ratio(res,cond,r1,r2,"pairwise_minThreshold")
+
+    stats_correlations_minThreshold <- stats_correlations_minThreshold %>% bind_rows(getCorrelationStats(res,cond,r1,r2,"correlation_minThreshold"))
   }
+
+  writeCorrelationPlots(plots_correlations_dna, sprintf("%s_DNA_pairwise.png",cond))
+  writeCorrelationPlots(plots_correlations_rna, sprintf("%s_RNA_pairwise.png",cond))
+  writeCorrelationPlots(plots_correlations_ratio, sprintf("%s_Ratio_pairwise.png",cond))
+  writeCorrelationPlots(plots_correlations_minThreshold_dna, sprintf("%s_DNA_pairwise_minThreshold.png",cond))
+  writeCorrelationPlots(plots_correlations_minThreshold_rna, sprintf("%s_RNA_pairwise_minThreshold.png",cond))
+  writeCorrelationPlots(plots_correlations_minThreshold_ratio, sprintf("%s_Ratio_pairwise_minThreshold.png",cond))
+
+  writeCorrelation(stats_correlations, sprintf("%s_correlation.tsv",cond))
+  writeCorrelation(stats_correlations_minThreshold, sprintf("%s_correlation_minThreshold.tsv",cond))
 }
 
 
@@ -202,7 +242,7 @@ plotAllBarcodesPerInsert <- function(data){
       geom_boxplot() +
       xlab('insert') +
       ylab('log2 fold change') +
-      theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid.major=element_blank(), panel.grid.minor=element_blank(), panel.background=element_blank(), axis.line=element_line(colour="black"), axis.title.x=element_text(size=15), axis.title.y=element_text(size=15), axis.text.y=element_text(size=15), legend.text=element_text(size=15))  
+      theme(axis.text.x=element_blank(), axis.ticks.x=element_blank(), panel.grid.major=element_blank(), panel.grid.minor=element_blank(), panel.background=element_blank(), axis.line=element_line(colour="black"), axis.title.x=element_text(size=15), axis.title.y=element_text(size=15), axis.text.y=element_text(size=15), legend.text=element_text(size=15))
     return(bp)
 }
 

@@ -711,7 +711,10 @@ if(!params.mpranalyze && params.containsKey("association")){
              tuple val(cond), val(rep), file("${cond}_${rep}_assigned_counts.tsv.gz") into merged_ch, merged_ch2
         shell:
             """
-            python ${"$baseDir"}/src/count/merge_label.py --counts ${counts} --assignment $association --design $des --output ${cond}_${rep}_assigned_counts.tsv.gz
+            python ${"$baseDir"}/src/count/merge_label.py --counts ${counts} \
+            --minRNACounts 0 --minDNACounts 0 \
+            --assignment $association --design $des \
+            --output ${cond}_${rep}_assigned_counts.tsv.gz
             """
 
     }
@@ -726,7 +729,7 @@ if(!params.mpranalyze && params.containsKey("association")){
 
         conda 'conf/mpraflow_r.yml'
 
-        result = merged_ch.groupTuple(by: 0).multiMap{i ->
+        result = merged_ch.groupTuple(by: 0, sort: true).multiMap{i ->
                                   cond: i[0]
                                   replicate: i[1].join(",")
                                   files: i[2]
@@ -739,7 +742,7 @@ if(!params.mpranalyze && params.containsKey("association")){
             file(lab) from label_file
         output:
             file "*.png"
-            file "*.txt"
+            file "*.tsv"
         script:
             pairlist = pairlistFiles.collect{"$it"}.join(',')
             def label = lab.exists() ? "--label $lab" : ""
@@ -756,7 +759,7 @@ if(!params.mpranalyze && params.containsKey("association")){
 
         conda 'conf/mpraflow_r.yml'
 
-        result = merged_ch2.groupTuple(by: 0).multiMap{i ->
+        result = merged_ch2.groupTuple(by: 0, sort: true).multiMap{i ->
                                   cond: i[0]
                                   replicate: i[1].join(",")
                                   files: i[2]
@@ -769,11 +772,17 @@ if(!params.mpranalyze && params.containsKey("association")){
         output:
             file "average_allreps.tsv.gz"
             file "allreps.tsv.gz"
+            file "allreps_minThreshold.tsv.gz"
         script:
             pairlist = pairlistFiles.collect{"$it"}.join(',')
         shell:
             """
-            Rscript ${"$baseDir"}/src/count/make_master_tables.R --condition $cond --threshold $params.thresh --output allreps.tsv.gz --statistic average_allreps.tsv.gz --files $pairlist --replicates $replicate
+            Rscript ${"$baseDir"}/src/count/make_master_tables.R --condition $cond \
+            --threshold $params.thresh \
+            --files $pairlist --replicates $replicate \
+            --output allreps_minThreshold.tsv.gz \
+            --output-all allreps.tsv.gz \
+            --statistic average_allreps.tsv.gz
             """
     }
 

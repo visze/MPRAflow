@@ -16,10 +16,12 @@ option_list <- list(
         help="Comma separated input files of assigned counts"),
     make_option(c("-r", "--replicates"), type="character",
         help="Comma separated name of the replicates (same order than files)"),
+    make_option(c("-a", "--output-all"), type="character",
+        help="Output file of master table. No BC threshold filter (optional)."),
     make_option(c("-o", "--output"), type="character",
-        help="Output file of master table"),
+        help="Output file of master table filtered by --threshold"),
     make_option(c("-s", "--statistic"), type="character",
-        help="Statistic of master table"),
+        help="Statistic of master table and filtered master table"),
     make_option(c("-t", "--threshold"), type="integer", default=10,
         help="Number of required barcodes (default 10)")
 )
@@ -53,52 +55,60 @@ replicates=strsplit(opt$replicates,",")[[1]]
 if (length(files) != length(replicates)) {
     stop("Number of input files must be euqal to number of replicates")
 }
+
 outfile=opt$output
 avg_outfile=opt$statistic
 #out=args[3]
 
-nrm_reps=c()
-all_reps=c()
 ##MAKE MASTER TABLE
-
-for (i in length(files)){
+masterTable = data.frame()
+for (i in 1:length(files)){
    file=files[i]
    rep=replicates[i]
 
-   tab=as.data.frame(read.table(file,header=TRUE))
+   table = as.data.frame(read.table(file,header=TRUE),stringsAsFactors=FALSE)
+   table$condition = cond
+   table$replicate = rep
 
-   filter_tab=tab[tab$n_obs_bc >= thresh,]
-
-   n_inserts=(dim(filter_tab)[1])
-
-   cond_col=as.data.frame(rep(cond,n_inserts))
-   rep_col=as.data.frame(rep(rep,n_inserts))
-   colnames(cond_col)='condition'
-   colnames(rep_col)='replicate'
-
-   pref=as.data.frame(cbind(cond_col,rep_col))
-   lab_tab=as.data.frame(cbind(pref,filter_tab))
-
-   ##NORMALISZE PER REPLCATE TO COMBINE IN NEXT FUNCTION
-   nrm_reps1=lab_tab
-   nrm_reps1$ratio=(nrm_reps1$ratio)/(median(nrm_reps1$ratio))
-   nrm_reps1$log2=round(log2(nrm_reps1$ratio),8)
-   nrm_reps=rbind(nrm_reps,nrm_reps1)
-   all_reps=rbind(all_reps,lab_tab)
+   masterTable <- masterTable %>% bind_rows(table)
 }
 
-write.table(all_reps,file=outfile,quote=FALSE,sep='\t',row.names=FALSE,col.names=TRUE )
+masterTable <- masterTable %>% group_by(condition,replicate) %>%
+                select(condition, replicate, name, dna_counts, rna_counts, dna_normalized, rna_normalized, ratio, log2, n_obs_bc)
 
+masterTableFiltered <- masterTable %>%
+                      filter(n_obs_bc >= thresh) %>%
+                      mutate(ratio = ratio/median(ratio), log2 = round(log2(ratio),8))
+masterTable <- masterTable %>% mutate(ratio = ratio/median(ratio), log2 = round(log2(ratio),8))
+
+writeFile <- function(file,table) {
+  gz <- gzfile(file, "w")
+  write.table(table,file=gz,quote=FALSE,sep='\t',row.names=FALSE,col.names=TRUE )
+  close(gz)
+}
+
+writeFile(outfile,masterTableFiltered)
+
+if ("output-all" %in% names(opt)) {
+  writeFile(opt$`output-all`, masterTable)
+}
 
 ##MAKE AVERAGED ACROSS REPLICATES
+makeAverageAcrossReplicates <- function(table, name) {
+  avg <- table %>% summarize(
+                      mean_ratio=mean(ratio),
+                      mean_log2=log2(mean(ratio)),
+                      mean_n_obs_bc=mean(n_obs_bc)
+                    )
+  avg$BC_filter = name
 
-all_avg <- all_reps %>% group_by(condition) %>% summarize(
-                    mean_ratio=mean(ratio),
-                    mean_log2=log2(mean(ratio)),
-                    mean_n_obs_bc=mean(n_obs_bc)
-                  )
+  return(avg)
+}
 
+all_avg <- makeAverageAcrossReplicates(masterTable, 'None') %>%
+            bind_rows(makeAverageAcrossReplicates(masterTableFiltered, paste0("n_obs_bc >= ", thresh)))
 
-write.table(all_avg,file=avg_outfile,quote=FALSE,sep='\t',row.names=FALSE,col.names=TRUE )
+writeFile(avg_outfile, all_avg)
+
 
 print('done')
