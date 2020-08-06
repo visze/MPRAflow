@@ -765,14 +765,12 @@ if(!params.mpranalyze && params.containsKey("association")){
 
         conda 'conf/mpraflow_py36.yml'
 
-        result = statistic_assignment_per_cond.collect("$it"}.join(','))
-
-          input:
-              file(statistic_per_cond) from statistic_assignment_per_cond
+        input:
+            file(statistic_per_cond) from statistic_assignment_per_cond
         output:
-             file("statistic_assigned_counts.tsv.gz")
+            file("statistic_assigned_counts.tsv.gz")
         script:
-           collected = statistic_per_cond.collect{"$it"}.join(' ')
+            collected = statistic_per_cond.collect{"$it"}.join(' ')
         shell:
             """
             (zcat $collected | head -n 1;

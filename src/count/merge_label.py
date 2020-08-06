@@ -112,8 +112,8 @@ def cli(counts_file, assignment_file, design_file, minRNACounts, minDNACounts, o
     total_dna_counts=sum(counts['dna_count'])
     total_rna_counts=sum(counts['rna_count'])
 
-    statistic['total dna counts']=total_dna_counts
-    statistic['total rna counts']=total_rna_counts
+    statistic['total dna counts'] = total_dna_counts
+    statistic['total rna counts'] = total_rna_counts
     statistic['avg dna counts per bc'] = statistic['total dna counts']/statistic['barcodes dna/rna']
     statistic['avg rna counts per bc'] = statistic['total rna counts']/statistic['barcodes dna/rna']
 
