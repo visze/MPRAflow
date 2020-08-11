@@ -10,8 +10,10 @@
 - using command line options for ALL count scripts to make them better readable and usabale in other context.
 - refactor of `plot_perInsertCounts_correlation.R`. Now a min threshold can be used and files are saved with and without min threshold. Downsample instances to (default) `10000` (if larger) for boxplot picture `all_barcodesPerInsert_box.png`. Otherwise the script takes days on larger data. Bringing correlation plots together reduce number of files.
 - adding new count statistic (like number of barcodes, barcodes shared between RNA/DNA, etc) in `statistic_raw_count.tsv` or `statistic_filtered_count.tsv`
+- correlation of barcodes (and not only oligos)
 - complete refactor of mpranalyze processes to gain speed (tremendously).
 - compressing output files to save disk space
+- updating conda R environment to newer versions
 
 ## v2.2
 

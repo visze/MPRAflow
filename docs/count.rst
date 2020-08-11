@@ -139,6 +139,10 @@ File tree
         |-allreps.tsv.gz
         |-allreps_minThreshold.tsv.gz
         |-average_allreps.tsv.gz
+        |-HepG2_barcode_correlation.tsv
+        |-HepG2_barcode_DNA_pairwise.png
+        |-HepG2_barcode_Ratio_pairwise.png
+        |-HepG2_barcode_RNA_pairwise.png
         |-HepG2_correlation_minThreshold.tsv
         |-HepG2_DNA_pairwise_minThreshold.png
         |-HepG2_Ratio_pairwise_minThreshold.png
@@ -183,14 +187,22 @@ allreps.tsv.gz; allreps_minThreshold.tsv.gz
   TSV of normalized DNA and RNA count, ratio, log2ratio, and number of observed barcodes for each condition, replicate, of every CRS. File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
 average_allreps.tsv.gz
   Mean ratio, log2 ratio, and observed barcodes per condidition normalized for all replicates
+HepG2_barcode_correlation.tsv
+  Correlation values between barcodes for a condition and 2 replicates (ie: HepG2 replicate 1 vs replicate 2). Barcodes with 0 DNA or RNA are removed.
+HepG2_barcode_DNA_pairwise.png
+  Correlation plot of DNA barcode counts per condition vs two reps (ie: HepG2 replicate 1 vs replicate 2). Barcodes with 0 DNA or RNA are removed.
+HepG2_barcode_Ratio_pairwise.png
+  Correlation plot of normalized log2(RNA/DNA) per condition for assigned oligos vs two reps (ie: HepG2 replicate 1 vs replicate 2). Barcodes with 0 DNA or RNA are removed.
+HepG2_barcode_RNA_pairwise.png
+  Correlation plot of RNA barcode counts per condition vs two reps (ie: HepG2 replicate 1 vs replicate 2). Barcodes with 0 DNA or RNA are removed.
 HepG2_correlation.tsv; HepG2_correlation_minThreshold.tsv
-  Correlation values for a condition and 2 replicates (ie: HepG2 replicate 1 vs replicate 2). File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
+  Correlation values between assigned oligos for a condition and 2 replicates (ie: HepG2 replicate 1 vs replicate 2). File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
 HepG2_DNA_pairwise.png; HepG2_1_2_DNA_pairwise_minThreshold.png
-  Correlation plot of DNA counts condition vs two reps (ie: HepG2 replicate 1 vs replicate 2). File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
+  Correlation plot of DNA assigned oligo counts per condition vs two reps (ie: HepG2 replicate 1 vs replicate 2). File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
 HepG2_Ratio_pairwise.png; HepG2_1_2_Ratio_pairwise_minThreshold.png
-  Correlation plot of normalized log2(RNA/DNA) condition vs two reps (ie: HepG2 replicate 1 vs replicate 2). File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
+  Correlation plot of normalized log2(RNA/DNA) per condition for assigned oligos vs two reps (ie: HepG2 replicate 1 vs replicate 2). File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
 HepG2_RNA_pairwise.png; HepG2_RNA_pairwise_minThreshold.png
-  Correlation plot of RNA counts condition vs two reps (ie: HepG2 replicate 1 vs replicate 2). File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
+  Correlation plot of RNA assigned oligo counts per condition vs two reps (ie: HepG2 replicate 1 vs replicate 2). File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
 HepG2_all_barcodesPerInsert_box.png; HepG2_all_barcodesPerInsert_box_minThreshold.png
   Box plot of each CRS accross replicates for all barcodes in each condidtion. If too many instances will be downsampled to 10,000. Colored by the label file. File with `minThreshold` shows only assignments matching the minimum number of observed barcodes (see option `--thresh`).
 HepG2_barcodesPerInsert.png; HepG2_barcodesPerInsert_minThreshold.png

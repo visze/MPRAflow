@@ -576,7 +576,7 @@ process 'dna_rna_merge_counts'{
     input:
         tuple val(cond),val(rep),val(typeA),val(typeB),val(datasetIDA),val(datasetIDB),file(countA),file(countB) from final_count.groupTuple(by: [0,1]).map{i -> i.flatten()}
     output:
-        tuple val(cond), val(rep), file("${cond}_${rep}_counts.tsv.gz") into merged_dna_rna
+        tuple val(cond), val(rep), file("${cond}_${rep}_counts.tsv.gz") into merged_dna_rna, merged_dna_rna2
     script:
         def dna = typeA == 'DNA' ? countA : countB
         def rna = typeA == 'DNA' ? countB : countA
@@ -596,6 +596,33 @@ process 'dna_rna_merge_counts'{
             """
 }
 
+
+process 'correlate_BC_counts'{
+    publishDir "$params.outdir/$cond", mode:'copy'
+    label 'longtime'
+
+    conda 'conf/mpraflow_r.yml'
+
+    result = merged_dna_rna2.groupTuple(by: 0, sort: true).multiMap{i ->
+                              cond: i[0]
+                              replicate: i[1].join(",")
+                              files: i[2]
+                            }
+    input:
+        file(pairlistFiles) from result.files
+        val(replicate) from result.replicate
+        val(cond) from result.cond
+    output:
+        file "*.png"
+        file "*.tsv"
+    script:
+        pairlist = pairlistFiles.collect{"$it"}.join(',')
+        """
+        Rscript ${"$baseDir"}/src/count/plot_perBCCounts_correlation.R \
+        --condition $cond \
+        --files $pairlist --replicates $replicate
+        """
+}
 
 //MPRAnalyze option
 //contributions: Gracie Gordon
@@ -766,7 +793,7 @@ if(!params.mpranalyze && params.containsKey("association")){
         conda 'conf/mpraflow_py36.yml'
 
         input:
-            file(statistic_per_cond) from statistic_assignment_per_cond
+            file(statistic_per_cond) from statistic_assignment_per_cond.collect()
         output:
             file("statistic_assigned_counts.tsv.gz")
         script:

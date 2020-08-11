@@ -33,7 +33,7 @@ def cli(condition, statistic, output_file):
         rep=replicate_count[0]
         file=replicate_count[1]
 
-        df_stats=pd.DataFrame(pd.read_csv(file, sep='\t', header=None))
+        df_stats=pd.read_csv(file, sep='\t', header=0)
         df_stats.insert(0,"condition",condition)
         df_stats.insert(1,"replicate",rep)
 
