@@ -613,8 +613,10 @@ process 'correlate_BC_counts'{
         val(replicate) from result.replicate
         val(cond) from result.cond
     output:
-        file "*.png"
-        file "*.tsv"
+        file "${cond}_barcode_DNA_pairwise.png"
+        file "${cond}_barcode_RNA_pairwise.png"
+        file "${cond}_barcode_Ratio_pairwise.png"
+        file "${cond}_barcode_correlation.tsv"
     script:
         pairlist = pairlistFiles.collect{"$it"}.join(',')
         """
@@ -829,8 +831,18 @@ if(!params.mpranalyze && params.containsKey("association")){
             val(cond) from result.cond
             file(lab) from label_file
         output:
-            file "*.png"
-            file "*.tsv"
+            file "${cond}_all_barcodesPerInsert_box.png"
+            file "${cond}_all_barcodesPerInsert_box_minThreshold.png"
+            file "${cond}_DNA_pairwise.png"
+            file "${cond}_DNA_pairwise_minThreshold.png"
+            file "${cond}_group_barcodesPerInsert_box.png"
+            file "${cond}_group_barcodesPerInsert_box_minThreshold.png"
+            file "${cond}_Ratio_pairwise.png"
+            file "${cond}_Ratio_pairwise_minThreshold.png"
+            file "${cond}_RNA_pairwise.png"
+            file "${cond}_RNA_pairwise_minThreshold.png"
+            file "${cond}_correlation.tsv"
+            file "${cond}_correlation_minThreshold.tsv"
         script:
             pairlist = pairlistFiles.collect{"$it"}.join(',')
             def label = lab.exists() ? "--label $lab" : ""

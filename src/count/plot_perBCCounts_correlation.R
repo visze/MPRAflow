@@ -54,42 +54,45 @@ print(data)
 
 plot_correlations_dna <- function(data,condition,r1,r2,name){
   max <- max(log2(data$`DNA.y`))
+  min <- min(log2(data$`DNA.x`))
   dna_p <- ggplot(data, aes(log2(DNA.x), log2(DNA.y))) +
               stat_density_2d(aes(fill = stat(level)), geom = 'polygon') +
               scale_fill_viridis_c(name = "density") +
               geom_point() +
               xlab(sprintf(paste("log2 Normalized DNA count per barcode,\n replicate", r1))) +
               ylab(sprintf(paste("log2 Normalized DNA count per barcode,\n replicate", r2))) +
-              geom_text(x=0, y=max-0.5,label=sprintf("   r = %.2f", cor(log2(data$DNA.x),log2(data$DNA.y),method="pearson")),size=10) +
-              geom_text(x=0, y=max-1.0, label=sprintf("rho = %.2f", cor(data$DNA.x,data$DNA.y,method="spearman")),size=10) +
+              geom_text(x=min+0.5, y=max-0.5,label=sprintf("   r = %.2f", cor(log2(data$DNA.x),log2(data$DNA.y),method="pearson")),size=10) +
+              geom_text(x=min+0.5, y=max-1.0, label=sprintf("rho = %.2f", cor(data$DNA.x,data$DNA.y,method="spearman")),size=10) +
               geom_abline(intercept = 0, slope = 1) +
               theme_classic(base_size = 30)
   return(dna_p)
 }
 plot_correlations_rna <- function(data,condition,r1,r2,name){
   max <- max(log2(data$`RNA.y`))
+  min <- min(log2(data$`RNA.x`))
   rna_p <- ggplot(data, aes(log2(RNA.x), log2(RNA.y))) +
               stat_density_2d(aes(fill = stat(level)), geom = 'polygon') +
               scale_fill_viridis_c(name = "density") +
               geom_point() +
               xlab(sprintf(paste("log2 Normalized RNA count per barcode,\n replicate", r1))) +
               ylab(sprintf(paste("log2 Normalized RNA count per barcode,\n replicate", r2))) +
-              geom_text(x=0, y=max-0.5,label=sprintf("   r = %.2f", cor(log2(data$RNA.x),log2(data$RNA.y),method="pearson")),size=10) +
-              geom_text(x=0, y=max-1.0, label=sprintf("rho = %.2f", cor(data$RNA.x,data$RNA.y,method="spearman")),size=10) +
+              geom_text(x=min+0.5, y=max-0.5,label=sprintf("   r = %.2f", cor(log2(data$RNA.x),log2(data$RNA.y),method="pearson")),size=10) +
+              geom_text(x=min+0.5, y=max-1.0, label=sprintf("rho = %.2f", cor(data$RNA.x,data$RNA.y,method="spearman")),size=10) +
               geom_abline(intercept = 0, slope = 1) +
               theme_classic(base_size = 30)
   return(rna_p)
 }
 plot_correlations_ratio <- function(data,condition,r1,r2,name){
   max <- max(log2(data$`Ratio.y`))
+  min <- min(log2(data$`Ratio.x`))
   ratio_p <- ggplot(data, aes(log2(Ratio.x), log2(Ratio.y))) +
                 stat_density_2d(aes(fill = stat(level)), geom = 'polygon') +
                 scale_fill_viridis_c(name = "density") +
                 geom_point() +
                 xlab(sprintf(paste("log2 RNA/DNA per barcode,\n replicate", r1))) +
                 ylab(sprintf(paste("log2 RNA/DNA per barcode,\n replicate", r2))) +
-                geom_text(x=0, y=max-0.5,label=sprintf("   r = %.2f", cor(log2(data$Ratio.x),log2(res$Ratio.y),method="pearson")),size=10) +
-                geom_text(x=0, y=max-1.0, label=sprintf("rho = %.2f", cor(data$Ratio.x,data$Ratio.y,method="spearman")),size=10) +
+                geom_text(x=min+0.5, y=max-0.5,label=sprintf("   r = %.2f", cor(log2(data$Ratio.x),log2(res$Ratio.y),method="pearson")),size=10) +
+                geom_text(x=min+0.5, y=max-1.0, label=sprintf("rho = %.2f", cor(data$Ratio.x,data$Ratio.y,method="spearman")),size=10) +
                 geom_abline(intercept = 0, slope = 1) +
                 theme_classic(base_size = 30)
   return(ratio_p)
