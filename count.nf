@@ -605,7 +605,7 @@ process 'correlate_BC_counts'{
 
     result = merged_dna_rna2.groupTuple(by: 0, sort: true).multiMap{i ->
                               cond: i[0]
-                              replicate: i[1].join(",")
+                              replicate: i[1]
                               files: i[2]
                             }
     input:
@@ -616,13 +616,44 @@ process 'correlate_BC_counts'{
         file "${cond}_barcode_DNA_pairwise.png"
         file "${cond}_barcode_RNA_pairwise.png"
         file "${cond}_barcode_Ratio_pairwise.png"
-        file "${cond}_barcode_correlation.tsv"
+        file "${cond}_barcode_correlation.tsv" into bc_correlation
+        file "${cond}_DNA_perBarcode.png"
+        file "${cond}_RNA_perBarcode.png"
     script:
-        pairlist = pairlistFiles.collect{"$it"}.join(',')
+        collected=pairlistFiles.collect{"$it"}
+        pairlist = []
+        for (i = 0; i < collected.size(); i++) {
+          pairlist << "${cond}_${replicate[i]}_counts.tsv.gz"
+        }
+        pairlist = pairlist.join(',')
+        replicates= replicate.join(',')
         """
         Rscript ${"$baseDir"}/src/count/plot_perBCCounts_correlation.R \
         --condition $cond \
-        --files $pairlist --replicates $replicate
+        --files $pairlist --replicates $replicates
+        """
+}
+
+process 'combine_bc_correlation' {
+    label 'shorttime'
+    publishDir "$params.outdir", mode:'copy'
+
+    conda 'conf/mpraflow_py36.yml'
+
+    input:
+        file(bc_correlation_collected) from bc_correlation.collect()
+    output:
+        file("statistic_bc_correlation.tsv")
+    script:
+        collected = bc_correlation_collected.collect{"$it"}.join(' ')
+    shell:
+        """
+        (
+          cat $collected | head -n 1;
+          for i in $collected; do
+            cat \$i | tail -n +2;
+          done;
+        ) > statistic_bc_correlation.tsv
         """
 }
 
@@ -657,8 +688,8 @@ if(params.mpranalyze){
             collected=pairlistFiles.collect{"$it"}
             res=[]
             for (i = 0; i < collected.size(); i++) {
-               f=collected[i]
                r=replicate[i]
+               f="${cond}_${r}_counts.tsv.gz"
                res.add("--counts $r $f")
             }
             counts=res.join(' ')
@@ -773,8 +804,8 @@ if(!params.mpranalyze && params.containsKey("association")){
            collected = pairlistFiles.collect{"$it"}
            res=[]
            for (i = 0; i < collected.size(); i++) {
-              f=collected[i]
               r=replicate[i]
+              f="${cond}_${r}_assigned_counts.statistic.tsv.gz"
               res.add("--statistic $r $f")
            }
            statistic=res.join(' ')
@@ -787,7 +818,7 @@ if(!params.mpranalyze && params.containsKey("association")){
             """
     }
 
-    // cobine statistics of all conditions
+    // combine statistics of all conditions
     process 'combine_stats_dna_rna_merge_all' {
         label 'shorttime'
         publishDir "$params.outdir", mode:'copy'
@@ -797,7 +828,7 @@ if(!params.mpranalyze && params.containsKey("association")){
         input:
             file(statistic_per_cond) from statistic_assignment_per_cond.collect()
         output:
-            file("statistic_assigned_counts.tsv.gz")
+            file("statistic_assigned_counts.tsv")
         script:
             collected = statistic_per_cond.collect{"$it"}.join(' ')
         shell:
@@ -805,7 +836,7 @@ if(!params.mpranalyze && params.containsKey("association")){
             (zcat $collected | head -n 1;
               for i in $collected; do
                 zcat \$i | tail -n +2
-              done) | gzip -c > statistic_assigned_counts.tsv.gz
+              done) > statistic_assigned_counts.tsv
             """
     }
 
@@ -821,7 +852,7 @@ if(!params.mpranalyze && params.containsKey("association")){
 
         result = merged_ch.groupTuple(by: 0, sort: true).multiMap{i ->
                                   cond: i[0]
-                                  replicate: i[1].join(",")
+                                  replicate: i[1]
                                   files: i[2]
                                 }
 
@@ -841,15 +872,58 @@ if(!params.mpranalyze && params.containsKey("association")){
             file "${cond}_Ratio_pairwise_minThreshold.png"
             file "${cond}_RNA_pairwise.png"
             file "${cond}_RNA_pairwise_minThreshold.png"
-            file "${cond}_correlation.tsv"
-            file "${cond}_correlation_minThreshold.tsv"
+            file "${cond}_correlation.tsv" into oligo_correlation
+            file "${cond}_correlation_minThreshold.tsv" into oligo_correlation_thresh
         script:
-            pairlist = pairlistFiles.collect{"$it"}.join(',')
+            collected=pairlistFiles.collect{"$it"}
+            pairlist = []
+            for (i = 0; i < collected.size(); i++) {
+              pairlist << "${cond}_${replicate[i]}_assigned_counts.tsv.gz"
+            }
+            pairlist = pairlist.join(',')
+            replicates= replicate.join(',')
             def label = lab.exists() ? "--label $lab" : ""
             """
-            Rscript ${"$baseDir"}/src/count/plot_perInsertCounts_correlation.R --condition $cond $label --files $pairlist --replicates $replicate --threshold $params.thresh
+            Rscript ${"$baseDir"}/src/count/plot_perInsertCounts_correlation.R \
+            --condition $cond $label \
+            --files $pairlist \
+            --replicates $replicates \
+            --threshold $params.thresh
             """
     }
+    /*
+    * combine oligo correlations
+    */
+    process 'combine_oligo_correlation' {
+        label 'shorttime'
+        publishDir "$params.outdir", mode:'copy'
+
+        conda 'conf/mpraflow_py36.yml'
+
+        input:
+            file(oligo_correlation) from oligo_correlation.collect()
+            file(oligo_correlation_thresh) from oligo_correlation_thresh.collect()
+        output:
+            file("oligo_correlation.tsv")
+        script:
+            oligo_correlation_collected = oligo_correlation.collect{"$it"}.join(' ')
+            oligo_correlation_thresh_collected = oligo_correlation_thresh.collect{"$it"}.join(' ')
+        shell:
+            """
+            (
+              cat $oligo_correlation_collected | head -n 1 | awk -v 'OFS=\\t' '{print \$0,"threshold (min $params.thresh)"}';
+              for i in $oligo_correlation_collected; do
+                cat \$i | tail -n +2 | awk -v 'OFS=\\t' '{print \$0,"False"}'
+              done;
+              for i in $oligo_correlation_thresh_collected; do
+                cat \$i | tail -n +2 | awk -v 'OFS=\\t' '{print \$0,"True"}'
+              done;
+            ) > oligo_correlation.tsv
+            """
+    }
+
+
+
     /*
     * contributions: Vikram Agarwal & Gracie Gordon
     */
@@ -861,7 +935,7 @@ if(!params.mpranalyze && params.containsKey("association")){
 
         result = merged_ch2.groupTuple(by: 0, sort: true).multiMap{i ->
                                   cond: i[0]
-                                  replicate: i[1].join(",")
+                                  replicate: i[1]
                                   files: i[2]
                                 }
 
@@ -874,12 +948,18 @@ if(!params.mpranalyze && params.containsKey("association")){
             file "allreps.tsv.gz"
             file "allreps_minThreshold.tsv.gz"
         script:
-            pairlist = pairlistFiles.collect{"$it"}.join(',')
+            collected=pairlistFiles.collect{"$it"}
+            pairlist = []
+            for (i = 0; i < collected.size(); i++) {
+              pairlist << "${cond}_${replicate[i]}_assigned_counts.tsv.gz"
+            }
+            pairlist = pairlist.join(',')
+            replicates= replicate.join(',')
         shell:
             """
             Rscript ${"$baseDir"}/src/count/make_master_tables.R --condition $cond \
             --threshold $params.thresh \
-            --files $pairlist --replicates $replicate \
+            --files $pairlist --replicates $replicates \
             --output allreps_minThreshold.tsv.gz \
             --output-all allreps.tsv.gz \
             --statistic average_allreps.tsv.gz

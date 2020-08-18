@@ -138,7 +138,7 @@ def cli(counts_file, assignment_file, design_file, minRNACounts, minDNACounts, o
                 grouped_label[grouped_label['name']!='no_BC'].dna_count['count']
             )/statistic['oligos dna/rna']
 
-    scaling = 10**min([len(str(total_dna_counts))-1,len(str(total_rna_counts))-1])
+    # scaling = 10**min([len(str(total_dna_counts))-1,len(str(total_rna_counts))-1])
     scaling = 10**6
 
     output['dna_normalized']=(grouped_label.dna_count['sum']+pseudocount)/((grouped_label.dna_count['count']+pseudocount))/total_dna_counts*scaling
