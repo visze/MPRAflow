@@ -39,7 +39,7 @@ def helpMessage() {
       --bc-length                   Barcode length (default 15)
       --umi-length                  UMI length (default 10)
       --no-umi                      Use this flag if no UMI is present in the experiment (default with UMI)
-      --merge_intersect             Only retain barcodes in RNA and DNA fraction (TRUE/FALSE, default: FALSE)
+      --merge-intersect             Only retain barcodes in RNA and DNA fraction (TRUE/FALSE, default: FALSE)
       --mpranalyze                  Only generate MPRAnalyze outputs
       --thresh                      minimum number of observed barcodes to retain insert (default 10)
 
@@ -70,7 +70,6 @@ output_docs = file("$baseDir/docs/output.md")
 //defaults
 results_path = params.outdir
 
-params.merge_intersect=false
 params.mpranalyze=false
 params.thresh=10
 
@@ -116,6 +115,13 @@ if (params.containsKey("labels")){
     }
 } else {
     label_file=file("NA")
+}
+
+// merge intersect (inner join)
+if (params.containsKey("merge-intersect")){
+    params.merge_intersect = true
+} else {
+    params.merge_intersect = false
 }
 
 // check if UMIs or not are present
@@ -580,20 +586,22 @@ process 'dna_rna_merge_counts'{
     script:
         def dna = typeA == 'DNA' ? countA : countB
         def rna = typeA == 'DNA' ? countB : countA
-        if (!params.merge_intersect)
-            """
-            join -e 0 -a1 -a2 -t"\$(echo -e '\\t')" -o 0 1.2 2.2 \
-            <( zcat  $dna | awk 'BEGIN{ OFS="\\t" }{ print \$2,\$1 }' | sort ) \
-            <( zcat $rna | awk 'BEGIN{ OFS="\\t" }{ print \$2, \$1 }' | sort) | \
-            gzip -c > ${cond}_${rep}_counts.tsv.gz
-            """
-        else
+        if (params.merge_intersect) {
             """
             join -1 1 -2 1 -t"\$(echo -e '\\t')" \
             <( zcat  $dna | awk 'BEGIN{ OFS="\\t" }{ print \$2,\$1 }' | sort ) \
             <( zcat $rna | awk 'BEGIN{ OFS="\\t" }{ print \$2, \$1 }' | sort) | \
             gzip -c > ${cond}_${rep}_counts.tsv.gz
             """
+        } else {
+            """
+            join -e 0 -a1 -a2 -t"\$(echo -e '\\t')" -o 0 1.2 2.2 \
+            <( zcat  $dna | awk 'BEGIN{ OFS="\\t" }{ print \$2,\$1 }' | sort ) \
+            <( zcat $rna | awk 'BEGIN{ OFS="\\t" }{ print \$2, \$1 }' | sort) | \
+            gzip -c > ${cond}_${rep}_counts.tsv.gz
+            """
+        }
+            
 }
 
 
@@ -770,10 +778,16 @@ if(!params.mpranalyze && params.containsKey("association")){
         output:
              tuple val(cond), val(rep), file("${cond}_${rep}_assigned_counts.tsv.gz") into merged_ch, merged_ch2
              tuple val(cond), val(rep), file("${cond}_${rep}_assigned_counts.statistic.tsv.gz") into assigned_stats
+        script:
+            if (params.merge_intersect) {
+                filter = "--minRNACounts 1 --minDNACounts 1"
+            } else {
+                filter = "--minRNACounts 0 --minDNACounts 0"
+            }
         shell:
             """
             python ${"$baseDir"}/src/count/merge_label.py --counts ${counts} \
-            --minRNACounts 0 --minDNACounts 0 \
+            ${filter} \
             --assignment $association --design $des \
             --output ${cond}_${rep}_assigned_counts.tsv.gz \
             --statistic ${cond}_${rep}_assigned_counts.statistic.tsv.gz
