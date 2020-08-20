@@ -39,13 +39,12 @@ def helpMessage() {
       --bc-length                   Barcode length (default 15)
       --umi-length                  UMI length (default 10)
       --no-umi                      Use this flag if no UMI is present in the experiment (default with UMI)
-      --merge-intersect             Only retain barcodes in RNA and DNA fraction (TRUE/FALSE, default: FALSE)
+      --merge-intersect             Only retain barcodes in RNA and DNA fraction, and not 0 counts; inner join instead of full join (TRUE/FALSE, default: FALSE)
       --mpranalyze                  Only generate MPRAnalyze outputs
       --thresh                      minimum number of observed barcodes to retain insert (default 10)
 
     Extras:
       --h, --help                   Print this help message
-      --email                       Set this parameter to your e-mail address to get a summary e-mail with details of the run sent to you when the workflow exits
       --name                        Name for the pipeline run. If not specified, Nextflow will automatically generate a random mnemonic.
     """.stripIndent()
 }
@@ -214,12 +213,16 @@ summary['Current path']     = "$PWD"
 summary['Working dir']      = workflow.workDir
 summary['Output dir']       = params.outdir
 summary['Script dir']       = workflow.projectDir
-summary['Config Profile']   = workflow.profile
-summary['Experiment File']  = params.experiment_file
-summary['reads']            = (params.no_umi ? reads_noUMI : reads)
+summary['Config profile']   = workflow.profile
+summary['Experiment file']  = params.experiment_file
+summary['Reads']            = (params.no_umi ? reads_noUMI : reads.println())
+summary['Design file']      = params.design_file if (params.design)
+summary['Association file'] = params.association_file if (params.association)
 summary['UMIs']             = (params.no_umi ? "Reads without UMI" : "Reads with UMI")
+summary['UMI length']       = params.umi_length if !params.no_umi
 summary['BC length']        = params.bc_length
 summary['BC threshold']     = params.thresh
+summary['Non zero counts (merge-intersect)']     = params.merge_intersect
 summary['mprAnalyze']       = params.mpranalyze
 
 if(params.email) summary['E-mail Address'] = params.email
