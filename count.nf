@@ -216,13 +216,13 @@ summary['Script dir']       = workflow.projectDir
 summary['Config profile']   = workflow.profile
 summary['Experiment file']  = params.experiment_file
 summary['Reads']            = (params.no_umi ? reads_noUMI : reads.print())
-summary['Design file']      = if (params.design) params.design_file
+if (params.design) summary['Design file'] =  params.design_file
 if (params.association) summary['Association file'] = params.association_file
 summary['UMIs']             = (params.no_umi ? "Reads without UMI" : "Reads with UMI")
-if (!params.no_umi) summary['UMI length']       = params.umi_length 
+if (!params.no_umi) summary['UMI length']  = params.umi_length 
 summary['BC length']        = params.bc_length
 summary['BC threshold']     = params.thresh
-summary['Non zero counts (merge-intersect)']     = params.merge_intersect
+summary['Non zero counts (merge-intersect)'] = params.merge_intersect
 summary['mprAnalyze']       = params.mpranalyze
 
 if(params.email) summary['E-mail Address'] = params.email
